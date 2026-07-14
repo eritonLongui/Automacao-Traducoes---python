@@ -1,14 +1,20 @@
-# Ignora todos os arquivos da pasta entrada
+# Ignora todos os arquivos da pasta
 entrada/*
 
 # Mantém a pasta
 !entrada/.gitkeep
 
-# Ignora todos os arquivos da pasta saida
+# Ignora todos os arquivos da pasta
 saida/*
 
 # Mantém a pasta
 !saida/.gitkeep
+
+# Ignora todos os arquivos da pasta
+divididos/*
+
+# Mantém a pasta
+!divididos/.gitkeep
 
 # Cache do Python
 __pycache__/
@@ -20,3 +26,6 @@ venv/
 
 # Configurações do VS Code
 .vscode/
+
+# Arquivos utilizados durante o desenvolvimento
+temp*

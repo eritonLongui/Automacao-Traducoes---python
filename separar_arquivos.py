@@ -9,7 +9,7 @@ from win32com.client import DispatchEx
 
 BASE_DIR = Path(__file__).resolve().parent
 ENTRADA_DIR = BASE_DIR / "entrada"
-SAIDA_DIR = BASE_DIR / "saida"
+SAIDA_DIR = BASE_DIR / "divididos"
 
 START_PATTERN = r"Che lo sappiano tutti quelli che vedranno questo Strumento Pubblico"
 
