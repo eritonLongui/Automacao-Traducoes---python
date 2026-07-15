@@ -28,6 +28,7 @@ echo.
 :: Cria as pastas caso nao existam
 if not exist entrada mkdir entrada
 if not exist saida mkdir saida
+if not exist __pycache__ mkdir __pycache__
 
 :: Cria os .gitkeep se nao existirem
 if not exist entrada\.gitkeep type nul > entrada\.gitkeep
@@ -37,8 +38,12 @@ if not exist saida\.gitkeep type nul > saida\.gitkeep
 attrib +h entrada\.gitkeep
 attrib +h saida\.gitkeep
 
+:: Oculta a pasta __pycache__
+attrib +h __pycache__
+
 echo.
-echo ==================================
+echo ===================================
 echo Configuracao concluida com sucesso!
-echo ==================================
+echo ===================================
+echo.
 pause
