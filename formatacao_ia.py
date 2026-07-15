@@ -82,6 +82,22 @@ def _encontrar_todas_ocorrencias(texto_base: str, trecho: str) -> List[Tuple[int
 
     return ocorrencias
 
+def deduplicar_segmentos(resultado: Dict[str, Any]) -> Dict[str, Any]:
+    vistos = set()
+    segmentos_limpos = []
+
+    for seg in resultado.get("segments", []):
+        texto_norm, _ = _normalizar_com_mapa(seg["text"])
+        chave = (int(seg["id"]), texto_norm)
+
+        if chave in vistos:
+            continue
+
+        vistos.add(chave)
+        segmentos_limpos.append(seg)
+
+    return {"segments": segmentos_limpos}
+
 def _normalizar_com_mapa(texto: str) -> Tuple[str, List[int]]:
     """
     Normaliza o texto para busca:
@@ -133,8 +149,8 @@ def _normalizar_com_mapa(texto: str) -> Tuple[str, List[int]]:
 
 def dividir_paragrafos_em_blocos(
     paragrafos: List[Dict[str, Any]],
-    max_paragrafos: int = 3,
-    max_caracteres: int = 2400,
+    max_paragrafos: int = 2,
+    max_caracteres: int = 1600,
 ) -> List[List[Dict[str, Any]]]:
     blocos = []
     bloco_atual = []
@@ -299,7 +315,7 @@ def _analisar_bloco(
 
     ultimo_content = None
 
-    for tentativa in range(1, 3):
+    for tentativa in range(1, 4):
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             temperature=GROQ_TEMPERATURE,
@@ -320,11 +336,15 @@ def _analisar_bloco(
             if tentativa == 1:
                 print("A IA retornou resposta vazia. Tentando novamente...")
                 continue
+            if tentativa == 2:
+                print("A IA retornou resposta vazia. Tentando novamente...")
+                continue
             raise ValueError("A IA retornou resposta vazia.")
 
         try:
             resultado = extrair_json_da_resposta(content)
             resultado = validar_resposta(resultado, paragrafos_prompt)
+            resultado = deduplicar_segmentos(resultado)
             return traduzir_segmentos_para_word(resultado, paragrafos, mapa_prompt_para_real)
         except Exception as e:
             if debug_base and nome_documento:
@@ -337,8 +357,11 @@ def _analisar_bloco(
             if tentativa == 1:
                 print("A resposta da IA veio inválida. Repetindo a análise...")
                 continue
+            if tentativa == 2:
+                print("A resposta da IA veio inválida. Repetindo a análise...")
+                continue
 
-            raise ValueError(f"Falha ao interpretar JSON da IA após 2 tentativas: {e}") from e
+            raise ValueError(f"Falha ao interpretar JSON da IA após {tentativa} tentativas: {e}") from e
 
     raise ValueError("Falha inesperada na análise do bloco.")
 

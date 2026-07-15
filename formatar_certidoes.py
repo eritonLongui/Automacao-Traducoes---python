@@ -141,6 +141,29 @@ def resolver_pastas(entrada_raiz: Path, lote: str | None) -> tuple[Path, Path]:
 
     return entrada_raiz, entrada_raiz
 
+def nome_pasta_processando(entrada_trabalho: Path, arquivos: list[Path]) -> str:
+    if not arquivos:
+        return entrada_trabalho.name
+
+    pastas_relativas = {
+        arquivo.parent.relative_to(entrada_trabalho)
+        for arquivo in arquivos
+        if arquivo.parent != entrada_trabalho
+    }
+
+    if not pastas_relativas:
+        return entrada_trabalho.name
+
+    if len(pastas_relativas) == 1:
+        rel = next(iter(pastas_relativas))
+        return str(rel)
+
+    nomes_topo = sorted({
+        rel.parts[0] if rel.parts else entrada_trabalho.name
+        for rel in pastas_relativas
+    })
+
+    return ", ".join(nomes_topo)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -237,7 +260,8 @@ def main():
             arquivos = list(iter_docx_files(entrada_trabalho))
             total_arquivos = len(arquivos)
 
-            print(f"Processando: {entrada_trabalho.name}")
+            nome_processamento = nome_pasta_processando(entrada_trabalho, arquivos)
+            print(f"Processando: {nome_processamento}")
             print()
 
             if not arquivos:

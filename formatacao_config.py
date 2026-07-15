@@ -79,6 +79,13 @@ Formato:
     ]
 }}
 
+Retorne cada trecho literal apenas uma vez por parágrafo.
+Se o mesmo texto aparecer várias vezes no parágrafo, retorne apenas uma ocorrência.
+Não converta datas por extenso em datas numéricas.
+Não reescreva nomes.
+Não atribua mais de uma role ao mesmo texto literal.
+O texto deve ser copiado exatamente como aparece no parágrafo.
+
 Roles disponíveis:
 {roles}
 """.strip()
