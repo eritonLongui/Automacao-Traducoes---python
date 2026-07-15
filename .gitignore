@@ -32,3 +32,6 @@ temp*
 
 # Debug
 debug_ia/
+
+# Chaves de API
+.env
