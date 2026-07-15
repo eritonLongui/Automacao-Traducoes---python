@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
@@ -85,6 +86,7 @@ def _normalizar_com_mapa(texto: str) -> Tuple[str, List[int]]:
     """
     Normaliza o texto para busca:
     - casefold
+    - remove acentos
     - espaços múltiplos viram um único espaço
     - preserva mapa de posição para voltar ao índice original
     """
@@ -100,10 +102,24 @@ def _normalizar_com_mapa(texto: str) -> Tuple[str, List[int]]:
                 chars.append(" ")
                 mapa.append(i)
                 ultimo_foi_espaco = True
-        else:
-            chars.append(ch.casefold())
-            mapa.append(i)
-            ultimo_foi_espaco = False
+            continue
+
+        decomposto = unicodedata.normalize("NFKD", ch)
+        sem_acentos = "".join(c for c in decomposto if not unicodedata.combining(c))
+
+        if not sem_acentos:
+            continue
+
+        for c in sem_acentos.casefold():
+            if c.isspace():
+                if not ultimo_foi_espaco:
+                    chars.append(" ")
+                    mapa.append(i)
+                    ultimo_foi_espaco = True
+            else:
+                chars.append(c)
+                mapa.append(i)
+                ultimo_foi_espaco = False
 
     inicio = 0
     fim = len(chars)
@@ -115,75 +131,34 @@ def _normalizar_com_mapa(texto: str) -> Tuple[str, List[int]]:
 
     return "".join(chars[inicio:fim]), mapa[inicio:fim]
 
-def _encontrar_trecho_no_texto(texto_base: str, trecho: str) -> Tuple[int, int]:
-    """
-    Localiza um trecho dentro do texto, tolerando diferenças de espaço.
-    Retorna (start, end) no texto original.
-    Se houver mais de uma ocorrência, falha para evitar formatação errada.
-    """
-    ocorrencias = _encontrar_todas_ocorrencias(texto_base, trecho)
+def dividir_paragrafos_em_blocos(
+    paragrafos: List[Dict[str, Any]],
+    max_paragrafos: int = 3,
+    max_caracteres: int = 2400,
+) -> List[List[Dict[str, Any]]]:
+    blocos = []
+    bloco_atual = []
+    tamanho_atual = 0
 
-    if not ocorrencias:
-        raise ValueError(f"Trecho não encontrado: {trecho!r}")
+    for p in paragrafos:
+        texto = str(p.get("text", ""))
+        tamanho_texto = len(texto)
 
-    if len(ocorrencias) > 1:
-        raise ValueError(f"Trecho ambíguo, encontrado mais de uma vez: {trecho!r}")
+        if bloco_atual and (
+            len(bloco_atual) >= max_paragrafos
+            or tamanho_atual + tamanho_texto > max_caracteres
+        ):
+            blocos.append(bloco_atual)
+            bloco_atual = []
+            tamanho_atual = 0
 
-    return ocorrencias[0]
+        bloco_atual.append(p)
+        tamanho_atual += tamanho_texto
 
-def validar_resposta(resultado: Dict[str, Any], paragrafos_prompt: List[Dict[str, Any]]) -> Dict[str, Any]:
-    if not isinstance(resultado, dict):
-        raise ValueError("Resposta da IA precisa ser um objeto JSON.")
+    if bloco_atual:
+        blocos.append(bloco_atual)
 
-    if "segments" not in resultado:
-        raise ValueError("Resposta da IA está sem o campo obrigatório: segments")
-
-    if not isinstance(resultado["segments"], list):
-        raise ValueError("'segments' precisa ser uma lista.")
-
-    allowed_roles = set(ROLE_DEFINITIONS.keys())
-    mapa_paragrafos = {
-        p["id"]: " ".join(str(p["text"]).split())
-        for p in paragrafos_prompt
-        if isinstance(p, dict) and "id" in p and "text" in p
-    }
-
-    for idx, seg in enumerate(resultado["segments"], start=1):
-        if not isinstance(seg, dict):
-            raise ValueError(f"Segmento {idx} precisa ser um objeto JSON.")
-
-        for campo in ("id", "text", "role"):
-            if campo not in seg:
-                raise ValueError(f"Segmento {idx} sem o campo obrigatório: {campo}")
-
-        seg_id = seg["id"]
-        text = seg["text"]
-        role = seg["role"]
-
-        if not isinstance(seg_id, int):
-            raise ValueError(f"Segmento {idx}: id precisa ser inteiro.")
-
-        if seg_id not in mapa_paragrafos:
-            raise ValueError(f"Segmento {idx}: id inexistente no prompt: {seg_id}")
-
-        if not isinstance(text, str) or not text.strip():
-            raise ValueError(f"Segmento {idx}: text precisa ser uma string não vazia.")
-
-        if not isinstance(role, str):
-            raise ValueError(f"Segmento {idx}: role precisa ser uma string.")
-
-        if role not in allowed_roles:
-            raise ValueError(f"Segmento {idx}: role inválida: {role}")
-
-        texto_paragrafo = mapa_paragrafos[seg_id]
-        texto_item = normalizar_texto_para_analise(text).casefold()
-
-        if texto_item not in normalizar_texto_para_analise(texto_paragrafo).casefold():
-            raise ValueError(
-                f"Segmento {idx}: o texto '{text}' não foi encontrado no parágrafo {seg_id}."
-            )
-
-    return resultado
+    return blocos
 
 def traduzir_segmentos_para_word(
     resultado: Dict[str, Any],
@@ -231,24 +206,73 @@ def traduzir_segmentos_para_word(
 
     return {"segments": segmentos_word}
 
-def analisar_documento(
+def validar_resposta(resultado: Dict[str, Any], paragrafos_prompt: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(resultado, dict):
+        raise ValueError("Resposta da IA precisa ser um objeto JSON.")
+
+    if "segments" not in resultado:
+        raise ValueError("Resposta da IA está sem o campo obrigatório: segments")
+
+    if not isinstance(resultado["segments"], list):
+        raise ValueError("'segments' precisa ser uma lista.")
+
+    allowed_roles = set(ROLE_DEFINITIONS.keys())
+    mapa_paragrafos = {
+        p["id"]: " ".join(str(p["text"]).split())
+        for p in paragrafos_prompt
+        if isinstance(p, dict) and "id" in p and "text" in p
+    }
+
+    for idx, seg in enumerate(resultado["segments"], start=1):
+        if not isinstance(seg, dict):
+            raise ValueError(f"Segmento {idx} precisa ser um objeto JSON.")
+
+        for campo in ("id", "text", "role"):
+            if campo not in seg:
+                raise ValueError(f"Segmento {idx} sem o campo obrigatório: {campo}")
+
+        seg_id = seg["id"]
+        text = seg["text"]
+        role = seg["role"]
+
+        if not isinstance(seg_id, int):
+            raise ValueError(f"Segmento {idx}: id precisa ser inteiro.")
+
+        if seg_id not in mapa_paragrafos:
+            raise ValueError(f"Segmento {idx}: id inexistente no prompt: {seg_id}")
+
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError(f"Segmento {idx}: text precisa ser uma string não vazia.")
+
+        if not isinstance(role, str):
+            raise ValueError(f"Segmento {idx}: role precisa ser uma string.")
+
+        if role not in allowed_roles:
+            raise ValueError(f"Segmento {idx}: role inválida: {role}")
+
+        texto_paragrafo = mapa_paragrafos[seg_id]
+        texto_item_norm, _ = _normalizar_com_mapa(text)
+        texto_paragrafo_norm, _ = _normalizar_com_mapa(texto_paragrafo)
+
+        if texto_item_norm not in texto_paragrafo_norm:
+            raise ValueError(
+                f"Segmento {idx}: o texto '{text}' não foi encontrado no parágrafo {seg_id}."
+            )
+
+    return resultado
+
+def _analisar_bloco(
     paragrafos: List[Dict[str, Any]],
+    client: Groq,
     debug_base: Path | None = None,
     nome_documento: str | None = None,
+    sufixo: str = "",
 ) -> Dict[str, Any]:
-    api_key = os.environ.get("GROQ_API_KEY")
-    if not api_key:
-        raise EnvironmentError("Defina a variável de ambiente GROQ_API_KEY.")
-
-    client = Groq(api_key=api_key)
-
     user_content, paragrafos_prompt, mapa_prompt_para_real = formatar_paragrafos_para_prompt(paragrafos)
 
-    print(f"Parágrafos enviados: {len(paragrafos)}")
-    print(f"Tamanho do prompt: {len(user_content)} caracteres")
-
     if debug_base and nome_documento:
-        (debug_base / f"{nome_documento}_prompt.json").write_text(
+        nome_arquivo_prompt = f"{nome_documento}_prompt{sufixo}.json"
+        (debug_base / nome_arquivo_prompt).write_text(
             user_content,
             encoding="utf-8",
         )
@@ -265,56 +289,85 @@ def analisar_documento(
         {
             "role": "user",
             "content": (
-                "Analise o JSON abaixo.\n\n"
-                "Retorne APENAS um objeto JSON válido, sem markdown, sem comentários e sem texto adicional.\n"
-                "O objeto deve possuir exatamente esta estrutura:\n"
-                "{\n"
-                '  "segments": [\n'
-                "    {\n"
-                '      "id": 1,\n'
-                '      "text": "Giuseppe Rossi",\n'
-                '      "role": "registered_name"\n'
-                "    }\n"
-                "  ]\n"
-                "}\n\n"
-                "Regras:\n"
-                "- cada item em 'segments' representa um trecho a ser formatado;\n"
-                "- 'id' é o id do parágrafo na lista enviada ao modelo;\n"
-                "- 'text' deve aparecer exatamente no parágrafo indicado;\n"
-                "- 'role' deve ser uma das roles permitidas.\n\n"
+                "Retorne apenas um JSON válido com a chave segments.\n"
+                "Não use markdown, não use comentários, não adicione texto fora do JSON.\n"
+                "Cada item deve conter id, text e role.\n\n"
                 f"{user_content}"
             ),
         },
     ]
 
-    try:
+    ultimo_content = None
+
+    for tentativa in range(1, 3):
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             temperature=GROQ_TEMPERATURE,
             messages=mensagens,
         )
-    except Exception as e:
-        print(f"Erro Groq: {e}")
+
+        content = response.choices[0].message.content
+        ultimo_content = content
+
         if debug_base and nome_documento:
-            (debug_base / f"{nome_documento}_erro_api.txt").write_text(
-                str(e),
+            nome_arquivo_resposta = f"{nome_documento}_resposta{sufixo}_tentativa{tentativa}.txt"
+            (debug_base / nome_arquivo_resposta).write_text(
+                content or "",
                 encoding="utf-8",
             )
-        raise
 
-    content = response.choices[0].message.content
+        if not content:
+            if tentativa == 1:
+                print("A IA retornou resposta vazia. Tentando novamente...")
+                continue
+            raise ValueError("A IA retornou resposta vazia.")
 
-    if debug_base and nome_documento:
-        (debug_base / f"{nome_documento}_resposta.txt").write_text(
-            content or "",
-            encoding="utf-8",
+        try:
+            resultado = extrair_json_da_resposta(content)
+            resultado = validar_resposta(resultado, paragrafos_prompt)
+            return traduzir_segmentos_para_word(resultado, paragrafos, mapa_prompt_para_real)
+        except Exception as e:
+            if debug_base and nome_documento:
+                nome_erro = f"{nome_documento}_erro_parse{sufixo}_tentativa{tentativa}.txt"
+                (debug_base / nome_erro).write_text(
+                    str(e),
+                    encoding="utf-8",
+                )
+
+            if tentativa == 1:
+                print("A resposta da IA veio inválida. Repetindo a análise...")
+                continue
+
+            raise ValueError(f"Falha ao interpretar JSON da IA após 2 tentativas: {e}") from e
+
+    raise ValueError("Falha inesperada na análise do bloco.")
+
+def analisar_documento(
+    paragrafos: List[Dict[str, Any]],
+    debug_base: Path | None = None,
+    nome_documento: str | None = None,
+) -> Dict[str, Any]:
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        raise EnvironmentError("Defina a variável de ambiente GROQ_API_KEY.")
+
+    client = Groq(api_key=api_key)
+
+    blocos = dividir_paragrafos_em_blocos(paragrafos, max_paragrafos=3, max_caracteres=2400)
+
+    print(f"Blocos enviados à IA: {len(blocos)}")
+
+    segmentos_finais = []
+
+    for i, bloco in enumerate(blocos, start=1):
+        print(f"Analisando bloco {i}/{len(blocos)}...")
+        resultado_bloco = _analisar_bloco(
+            bloco,
+            client=client,
+            debug_base=debug_base,
+            nome_documento=nome_documento,
+            sufixo=f"_bloco{i}",
         )
+        segmentos_finais.extend(resultado_bloco["segments"])
 
-    if not content:
-        raise ValueError("A IA retornou resposta vazia.")
-
-    resultado = extrair_json_da_resposta(content)
-    resultado = validar_resposta(resultado, paragrafos_prompt)
-
-    resultado_word = traduzir_segmentos_para_word(resultado, paragrafos, mapa_prompt_para_real)
-    return resultado_word
+    return {"segments": segmentos_finais}

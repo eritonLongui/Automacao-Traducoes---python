@@ -83,7 +83,6 @@ def processar_arquivo(
 
         paragrafos = extrair_paragrafos_corpo(doc)
         
-        # debug
         texto_extraido = "\n\n".join(
             f"[{p['id']}]\n{p['text']}"
             for p in paragrafos
@@ -93,7 +92,6 @@ def processar_arquivo(
             encoding="utf-8",
         )
         print(f"\n========== {arquivo.name} ==========")
-        #
         
         analise = analisar_documento(
             paragrafos,
@@ -202,6 +200,9 @@ def main():
     word = None
     erros = 0
 
+    total_processadas = 0
+    total_arquivos = 0
+
     try:
         word = abrir_word()
 
@@ -217,6 +218,9 @@ def main():
                 raise ValueError(
                     f"O arquivo '{arquivo}' precisa estar dentro de: {entrada_trabalho}"
                 ) from exc
+            
+            print(f"Processando: {arquivo.parent.name}")
+            print()
 
             processar_arquivo(
                 word,
@@ -226,8 +230,15 @@ def main():
                 debug_base,
             )
 
+            total_processadas = 1
+            total_arquivos = 1
+
         else:
             arquivos = list(iter_docx_files(entrada_trabalho))
+            total_arquivos = len(arquivos)
+
+            print(f"Processando: {entrada_trabalho.name}")
+            print()
 
             if not arquivos:
                 print(f"Nenhum .docx encontrado em: {entrada_trabalho}")
@@ -241,9 +252,13 @@ def main():
                             saida_base,
                             debug_base,
                         )
+
+                        total_processadas += 1
+                        print()
                     except Exception as e:
                         erros += 1
                         print(f"ERRO em {arquivo.name}: {e}")
+                        print()
 
         if args.limpar_lote:
             if not args.lote:
@@ -258,6 +273,10 @@ def main():
                 print(
                     "O lote não foi removido porque houve erro em pelo menos um arquivo."
                 )
+
+        print(f"Total de certidões encontradas: {total_arquivos}")
+        print(f"Total de certidões processadas com sucesso: {total_processadas}")
+        print(f"Total de erros: {erros}")
 
     finally:
         if word is not None:

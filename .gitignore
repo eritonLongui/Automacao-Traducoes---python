@@ -29,3 +29,6 @@ venv/
 
 # Arquivos utilizados durante o desenvolvimento
 temp*
+
+# Debug
+debug_ia/
