@@ -1,14 +1,25 @@
 import json
 import os
 import re
+import time
 import unicodedata
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
 from groq import Groq
+from google import genai
 from dotenv import load_dotenv
 
-from formatacao_config import GROQ_MODEL, GROQ_TEMPERATURE, SYSTEM_PROMPT, ROLE_DEFINITIONS
+from formatacao_config import (
+    GROQ_MODEL,
+    GEMINI_FLASH_LITE_MODEL,
+    GEMINI_FLASH_MODEL,
+    GEMINI_3_FLASH_MODEL,
+    GROQ_TEMPERATURE,
+    GEMINI_TEMPERATURE,
+    SYSTEM_PROMPT,
+    ROLE_DEFINITIONS,
+)
 from formatacao_leitor_word import normalizar_texto_para_analise
 
 load_dotenv()
@@ -279,7 +290,8 @@ def validar_resposta(resultado: Dict[str, Any], paragrafos_prompt: List[Dict[str
 
 def _analisar_bloco(
     paragrafos: List[Dict[str, Any]],
-    client: Groq,
+    client_groq: Groq,
+    gemini_client: genai.Client,
     debug_base: Path | None = None,
     nome_documento: str | None = None,
     sufixo: str = "",
@@ -293,15 +305,12 @@ def _analisar_bloco(
             encoding="utf-8",
         )
 
-    mensagens = [
-        {
-            "role": "system",
-            "content": SYSTEM_PROMPT.format(
-                roles="\n".join(
-                    f"- {k}: {v}" for k, v in ROLE_DEFINITIONS.items()
-                )
-            ),
-        },
+    system_instruction = SYSTEM_PROMPT.format(
+        roles="\n".join(f"- {k}: {v}" for k, v in ROLE_DEFINITIONS.items())
+    )
+
+    mensagens_groq = [
+        {"role": "system", "content": system_instruction},
         {
             "role": "user",
             "content": (
@@ -313,16 +322,67 @@ def _analisar_bloco(
         },
     ]
 
+    prompt_gemini = (
+        "Retorne apenas um JSON válido com a chave segments.\n"
+        "Não use markdown, não use comentários, não adicione texto fora do JSON.\n"
+        "Cada item deve conter id, text e role.\n\n"
+        f"{user_content}"
+    )
+
     ultimo_content = None
 
-    for tentativa in range(1, 4):
-        response = client.chat.completions.create(
-            model=GROQ_MODEL,
-            temperature=GROQ_TEMPERATURE,
-            messages=mensagens,
-        )
+    for tentativa in range(1, 5):
+        content = None
+        
+        try:
+            if tentativa == 1:
+                # 1. GPT-OSS-120B (Groq/OpenRouter proxy)
+                response = client_groq.chat.completions.create(
+                    model=GROQ_MODEL,
+                    temperature=GROQ_TEMPERATURE,
+                    messages=mensagens_groq,
+                )
+                content = response.choices[0].message.content
 
-        content = response.choices[0].message.content
+            elif tentativa == 2:
+                # 2. Gemini 3.1 Flash-Lite
+                response = gemini_client.models.generate_content(
+                    model=GEMINI_FLASH_LITE_MODEL,
+                    contents=prompt_gemini,
+                    config=genai.types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        temperature=GEMINI_TEMPERATURE,
+                    )
+                )
+                content = response.text
+
+            elif tentativa == 3:
+                # 3. Gemini 2.5 Flash
+                response = gemini_client.models.generate_content(
+                    model=GEMINI_FLASH_MODEL,
+                    contents=prompt_gemini,
+                    config=genai.types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        temperature=GEMINI_TEMPERATURE,
+                    )
+                )
+                content = response.text
+
+            elif tentativa == 4:
+                # 4. Gemini 3 Flash
+                response = gemini_client.models.generate_content(
+                    model=GEMINI_3_FLASH_MODEL,
+                    contents=prompt_gemini,
+                    config=genai.types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        temperature=GEMINI_TEMPERATURE,
+                    )
+                )
+                content = response.text
+                
+        except Exception as api_err:
+            content = ""
+
         ultimo_content = content
 
         if debug_base and nome_documento:
@@ -332,36 +392,35 @@ def _analisar_bloco(
                 encoding="utf-8",
             )
 
+        falha = False
+        erro_msg = ""
+        
         if not content:
-            if tentativa == 1:
-                print("A IA retornou resposta vazia. Tentando novamente...")
+            falha = True
+            erro_msg = "A IA retornou resposta vazia ou houve erro de API."
+        else:
+            try:
+                resultado = extrair_json_da_resposta(content)
+                resultado = validar_resposta(resultado, paragrafos_prompt)
+                resultado = deduplicar_segmentos(resultado)
+                return traduzir_segmentos_para_word(resultado, paragrafos, mapa_prompt_para_real)
+            except Exception as e:
+                if debug_base and nome_documento:
+                    nome_erro = f"{nome_documento}_erro_parse{sufixo}_tentativa{tentativa}.txt"
+                    (debug_base / nome_erro).write_text(
+                        str(e),
+                        encoding="utf-8",
+                    )
+                falha = True
+                erro_msg = str(e)
+                
+        if falha:
+            if tentativa < 4:
+                print(f"      [A tentativa {tentativa} falhou, tentando novamente...]")
+                time.sleep(1)
                 continue
-            if tentativa == 2:
-                print("A IA retornou resposta vazia. Tentando novamente...")
-                continue
-            raise ValueError("A IA retornou resposta vazia.")
-
-        try:
-            resultado = extrair_json_da_resposta(content)
-            resultado = validar_resposta(resultado, paragrafos_prompt)
-            resultado = deduplicar_segmentos(resultado)
-            return traduzir_segmentos_para_word(resultado, paragrafos, mapa_prompt_para_real)
-        except Exception as e:
-            if debug_base and nome_documento:
-                nome_erro = f"{nome_documento}_erro_parse{sufixo}_tentativa{tentativa}.txt"
-                (debug_base / nome_erro).write_text(
-                    str(e),
-                    encoding="utf-8",
-                )
-
-            if tentativa == 1:
-                print("A resposta da IA veio inválida. Repetindo a análise...")
-                continue
-            if tentativa == 2:
-                print("A resposta da IA veio inválida. Repetindo a análise...")
-                continue
-
-            raise ValueError(f"Falha ao interpretar JSON da IA após {tentativa} tentativas: {e}") from e
+            else:
+                raise ValueError(f"Falha ao interpretar resposta da IA após {tentativa} tentativas: {erro_msg}")
 
     raise ValueError("Falha inesperada na análise do bloco.")
 
@@ -370,11 +429,16 @@ def analisar_documento(
     debug_base: Path | None = None,
     nome_documento: str | None = None,
 ) -> Dict[str, Any]:
-    api_key = os.environ.get("GROQ_API_KEY")
-    if not api_key:
+    groq_api_key = os.environ.get("GROQ_API_KEY")
+    if not groq_api_key:
         raise EnvironmentError("Defina a variável de ambiente GROQ_API_KEY.")
 
-    client = Groq(api_key=api_key)
+    gemini_api_key = os.environ.get("GEMINI_API_KEY")
+    if not gemini_api_key:
+        raise EnvironmentError("Defina a variável de ambiente GEMINI_API_KEY.")
+
+    client_groq = Groq(api_key=groq_api_key)
+    gemini_client = genai.Client(api_key=gemini_api_key)
 
     blocos = dividir_paragrafos_em_blocos(paragrafos, max_paragrafos=3, max_caracteres=2400)
 
@@ -386,7 +450,8 @@ def analisar_documento(
         print(f"Analisando bloco {i}/{len(blocos)}...")
         resultado_bloco = _analisar_bloco(
             bloco,
-            client=client,
+            client_groq=client_groq,
+            gemini_client=gemini_client,
             debug_base=debug_base,
             nome_documento=nome_documento,
             sufixo=f"_bloco{i}",
