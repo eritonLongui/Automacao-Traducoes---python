@@ -37,6 +37,21 @@ def criar_pastas(base_saida: Path, base_debug: Path) -> None:
     base_saida.mkdir(parents=True, exist_ok=True)
     base_debug.mkdir(parents=True, exist_ok=True)
 
+def limpar_arquivos_processados(entrada_base: Path) -> None:
+    """
+    Remove todo o conteúdo de ENTRADA_DIR, preservando apenas .gitkeep.
+    """
+    if not entrada_base.exists():
+        return
+
+    for item in entrada_base.iterdir():
+        if item.name == ".gitkeep":
+            continue
+
+        if item.is_dir():
+            shutil.rmtree(item)
+        else:
+            item.unlink()
 
 def caminho_saida(
     arquivo_entrada: Path,
@@ -139,7 +154,7 @@ def processar_arquivo(
         if out_fallback.exists():
             out_fallback.unlink()
 
-        print(f"OK: {arquivo.name} -> {out_path.name}")
+        print(f"OK: {out_path.name}")
 
     except Exception:
         salvar_saida_nao_formatada(arquivo, out_fallback)
@@ -348,6 +363,8 @@ def main():
             word.Quit()
 
         pythoncom.CoUninitialize()
+
+        limpar_arquivos_processados(entrada_raiz)
 
     raise SystemExit(1 if erros else 0)
 
