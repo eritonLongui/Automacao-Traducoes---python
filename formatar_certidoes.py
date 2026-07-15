@@ -17,6 +17,7 @@ from formatacao_leitor_word import (
 from formatacao_aplicador import (
     resetar_formatacao_range,
     aplicar_segmentos,
+    aplicar_formatacoes_gerais,
 )
 
 
@@ -31,6 +32,7 @@ def identificar_tipo_pelo_nome(nome_arquivo: str) -> str:
 
     return "desconhecido"
 
+
 def criar_pastas(base_saida: Path, base_debug: Path) -> None:
     base_saida.mkdir(parents=True, exist_ok=True)
     base_debug.mkdir(parents=True, exist_ok=True)
@@ -44,7 +46,18 @@ def caminho_saida(
     rel = arquivo_entrada.relative_to(entrada_base)
     destino_dir = saida_base / rel.parent
     destino_dir.mkdir(parents=True, exist_ok=True)
-    return destino_dir / f"{arquivo_entrada.stem}_formatado.docx"
+    return destino_dir / f"{arquivo_entrada.stem}.docx"
+
+
+def caminho_saida_sem_formatacao(
+    arquivo_entrada: Path,
+    entrada_base: Path,
+    saida_base: Path,
+) -> Path:
+    rel = arquivo_entrada.relative_to(entrada_base)
+    destino_dir = saida_base / rel.parent
+    destino_dir.mkdir(parents=True, exist_ok=True)
+    return destino_dir / f"{arquivo_entrada.stem}_sem_formatacao.docx"
 
 
 def caminho_debug(
@@ -58,6 +71,15 @@ def caminho_debug(
     return destino_dir / f"{arquivo_entrada.stem}.json"
 
 
+def salvar_saida_nao_formatada(
+    arquivo_origem: Path,
+    out_fallback: Path,
+) -> None:
+    if out_fallback.exists():
+        out_fallback.unlink()
+    shutil.copy2(arquivo_origem, out_fallback)
+
+
 def processar_arquivo(
     word,
     arquivo: Path,
@@ -66,23 +88,26 @@ def processar_arquivo(
     debug_base: Path,
 ) -> None:
     out_path = caminho_saida(arquivo, entrada_base, saida_base)
+    out_fallback = caminho_saida_sem_formatacao(arquivo, entrada_base, saida_base)
     debug_path = caminho_debug(arquivo, entrada_base, debug_base)
 
     if out_path.exists():
         out_path.unlink()
+    if out_fallback.exists():
+        out_fallback.unlink()
 
-    doc = abrir_documento(word, arquivo, read_only=False)
+    doc = None
 
     try:
+        doc = abrir_documento(word, arquivo, read_only=False)
+
         faixa = localizar_faixa_corpo(doc)
         corpo_range = doc.Range(faixa["start_char"], faixa["end_char"])
 
         resetar_formatacao_range(corpo_range)
-        
-        # incluir formatações básicas por script
 
         paragrafos = extrair_paragrafos_corpo(doc)
-        
+
         texto_extraido = "\n\n".join(
             f"[{p['id']}]\n{p['text']}"
             for p in paragrafos
@@ -91,6 +116,7 @@ def processar_arquivo(
             texto_extraido,
             encoding="utf-8",
         )
+
         print(f"\n========== {arquivo.name} ==========")
         
         analise = analisar_documento(
@@ -105,14 +131,27 @@ def processar_arquivo(
             encoding="utf-8",
         )
 
+        aplicar_formatacoes_gerais(doc)
         aplicar_segmentos(doc, analise["segments"])
 
         doc.SaveAs2(str(out_path), FileFormat=16)
 
+        if out_fallback.exists():
+            out_fallback.unlink()
+
         print(f"OK: {arquivo.name} -> {out_path.name}")
 
+    except Exception:
+        salvar_saida_nao_formatada(arquivo, out_fallback)
+        print(f"FALHA: {arquivo.name} -> salvo sem formatação em {out_fallback.name}")
+        raise
+
     finally:
-        doc.Close(False)
+        if doc is not None:
+            try:
+                doc.Close(False)
+            except Exception:
+                pass
 
 
 def resolver_pastas(entrada_raiz: Path, lote: str | None) -> tuple[Path, Path]:
@@ -141,6 +180,7 @@ def resolver_pastas(entrada_raiz: Path, lote: str | None) -> tuple[Path, Path]:
 
     return entrada_raiz, entrada_raiz
 
+
 def nome_pasta_processando(entrada_trabalho: Path, arquivos: list[Path]) -> str:
     if not arquivos:
         return entrada_trabalho.name
@@ -164,6 +204,7 @@ def nome_pasta_processando(entrada_trabalho: Path, arquivos: list[Path]) -> str:
     })
 
     return ", ".join(nomes_topo)
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -241,7 +282,7 @@ def main():
                 raise ValueError(
                     f"O arquivo '{arquivo}' precisa estar dentro de: {entrada_trabalho}"
                 ) from exc
-            
+
             print(f"Processando: {arquivo.parent.name}")
             print()
 

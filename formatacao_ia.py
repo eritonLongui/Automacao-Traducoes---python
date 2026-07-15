@@ -6,16 +6,13 @@ import unicodedata
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
-from groq import Groq
 from google import genai
 from dotenv import load_dotenv
 
 from formatacao_config import (
-    GROQ_MODEL,
     GEMINI_FLASH_LITE_MODEL,
     GEMINI_FLASH_MODEL,
     GEMINI_3_FLASH_MODEL,
-    GROQ_TEMPERATURE,
     GEMINI_TEMPERATURE,
     SYSTEM_PROMPT,
     ROLE_DEFINITIONS,
@@ -290,7 +287,6 @@ def validar_resposta(resultado: Dict[str, Any], paragrafos_prompt: List[Dict[str
 
 def _analisar_bloco(
     paragrafos: List[Dict[str, Any]],
-    client_groq: Groq,
     gemini_client: genai.Client,
     debug_base: Path | None = None,
     nome_documento: str | None = None,
@@ -331,21 +327,12 @@ def _analisar_bloco(
 
     ultimo_content = None
 
-    for tentativa in range(1, 5):
+    for tentativa in range(1, 4):
         content = None
         
         try:
             if tentativa == 1:
-                # 1. GPT-OSS-120B (Groq/OpenRouter proxy)
-                response = client_groq.chat.completions.create(
-                    model=GROQ_MODEL,
-                    temperature=GROQ_TEMPERATURE,
-                    messages=mensagens_groq,
-                )
-                content = response.choices[0].message.content
-
-            elif tentativa == 2:
-                # 2. Gemini 3.1 Flash-Lite
+                # 1. Gemini 3.1 Flash-Lite
                 response = gemini_client.models.generate_content(
                     model=GEMINI_FLASH_LITE_MODEL,
                     contents=prompt_gemini,
@@ -356,8 +343,8 @@ def _analisar_bloco(
                 )
                 content = response.text
 
-            elif tentativa == 3:
-                # 3. Gemini 2.5 Flash
+            elif tentativa == 2:
+                # 2. Gemini 2.5 Flash
                 response = gemini_client.models.generate_content(
                     model=GEMINI_FLASH_MODEL,
                     contents=prompt_gemini,
@@ -368,8 +355,8 @@ def _analisar_bloco(
                 )
                 content = response.text
 
-            elif tentativa == 4:
-                # 4. Gemini 3 Flash
+            elif tentativa == 3:
+                # 3. Gemini 3 Flash
                 response = gemini_client.models.generate_content(
                     model=GEMINI_3_FLASH_MODEL,
                     contents=prompt_gemini,
@@ -415,8 +402,8 @@ def _analisar_bloco(
                 erro_msg = str(e)
                 
         if falha:
-            if tentativa < 4:
-                print(f"      [A tentativa {tentativa} falhou, tentando novamente...]")
+            if tentativa < 3:
+                print(f"      [A tentativa {tentativa} falhou, aguardando 1 segundo e tentando novamente...]")
                 time.sleep(1)
                 continue
             else:
@@ -429,15 +416,10 @@ def analisar_documento(
     debug_base: Path | None = None,
     nome_documento: str | None = None,
 ) -> Dict[str, Any]:
-    groq_api_key = os.environ.get("GROQ_API_KEY")
-    if not groq_api_key:
-        raise EnvironmentError("Defina a variável de ambiente GROQ_API_KEY.")
-
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
     if not gemini_api_key:
         raise EnvironmentError("Defina a variável de ambiente GEMINI_API_KEY.")
 
-    client_groq = Groq(api_key=groq_api_key)
     gemini_client = genai.Client(api_key=gemini_api_key)
 
     blocos = dividir_paragrafos_em_blocos(paragrafos, max_paragrafos=3, max_caracteres=2400)
@@ -450,7 +432,6 @@ def analisar_documento(
         print(f"Analisando bloco {i}/{len(blocos)}...")
         resultado_bloco = _analisar_bloco(
             bloco,
-            client_groq=client_groq,
             gemini_client=gemini_client,
             debug_base=debug_base,
             nome_documento=nome_documento,

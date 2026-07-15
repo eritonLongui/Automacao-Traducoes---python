@@ -1,5 +1,35 @@
 from typing import Dict, Any, List
 
+def aplicar_formatacoes_gerais(doc) -> None:
+    """
+    Aplica formatações estáticas fixas no documento inteiro, independentes da IA.
+    """
+    try:
+        # 1. "ufficio" -> minúsculo e sem negrito
+        find_obj = doc.Content.Find
+        find_obj.ClearFormatting()
+        find_obj.Replacement.ClearFormatting()
+        
+        find_obj.Text = "ufficio"
+        find_obj.Replacement.Text = "ufficio"
+        find_obj.Replacement.Font.Bold = False
+        find_obj.Format = True
+        find_obj.MatchCase = False
+        find_obj.Execute(Replace=2, Wrap=1)
+
+        # 2. "dell'Ufficio Dello Stato Civile" -> "dell'Ufficio dello Stato Civile"
+        find_obj2 = doc.Content.Find
+        find_obj2.ClearFormatting()
+        find_obj2.Replacement.ClearFormatting()
+        
+        find_obj2.Text = "dell'ufficio dello stato civile"
+        find_obj2.Replacement.Text = "dell'Ufficio dello Stato Civile"
+        find_obj2.Format = False
+        find_obj2.MatchCase = False
+        find_obj2.Execute(Replace=2, Wrap=1)
+    except Exception as e:
+        print(f"Erro ao aplicar formatações gerais: {e}")
+
 from formatacao_config import ROLE_STYLES
 from formatacao_leitor_word import sanitize_word_text
 
