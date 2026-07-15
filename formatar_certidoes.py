@@ -16,7 +16,6 @@ from formatacao_leitor_word import (
 )
 from formatacao_aplicador import (
     resetar_formatacao_range,
-    normalizar_caixa_paragrafos,
     aplicar_segmentos,
 )
 
@@ -79,7 +78,6 @@ def processar_arquivo(
         corpo_range = doc.Range(faixa["start_char"], faixa["end_char"])
 
         resetar_formatacao_range(corpo_range)
-        normalizar_caixa_paragrafos(doc, faixa["paragraph_ids"])
         
         # incluir formatações básicas por script
 

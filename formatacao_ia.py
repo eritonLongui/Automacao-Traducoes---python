@@ -8,21 +8,19 @@ from groq import Groq
 from dotenv import load_dotenv
 
 from formatacao_config import GROQ_MODEL, GROQ_TEMPERATURE, SYSTEM_PROMPT, ROLE_DEFINITIONS
+from formatacao_leitor_word import normalizar_texto_para_analise
 
 load_dotenv()
 
 ALLOWED_DOCUMENT_TYPES = {"nascimento", "casamento", "desconhecido"}
 
 
-def formatar_paragrafos_para_prompt(paragrafos: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]], Dict[int, int]]:
+def formatar_paragrafos_para_prompt(
+    paragrafos: List[Dict[str, Any]]
+) -> Tuple[str, List[Dict[str, Any]], Dict[int, int]]:
     """
-    Constrói o JSON enviado para a IA usando IDs sequenciais 1..N,
-    independentemente dos IDs reais do Word.
-
-    Retorna:
-    - string JSON para o prompt
-    - lista de parágrafos normalizados para validação
-    - mapa de id do prompt -> id real do Word
+    Constrói o JSON enviado para a IA com IDs sequenciais 1..N.
+    O texto já vai normalizado apenas para análise.
     """
     paragrafos_prompt = []
     mapa_prompt_para_real = {}
@@ -31,29 +29,57 @@ def formatar_paragrafos_para_prompt(paragrafos: List[Dict[str, Any]]) -> Tuple[s
         paragrafos_prompt.append(
             {
                 "id": idx,
-                "text": p["text"],
+                "text": normalizar_texto_para_analise(p["text"]),
             }
         )
         mapa_prompt_para_real[idx] = int(p["id"])
 
     bloco = {
-        "instructions": {
-            "paragraph_id_is_sequential_1_based": True,
-            "definitions": ROLE_DEFINITIONS,
-        },
-        "paragraphs": paragrafos_prompt,
+        "paragraphs": paragrafos_prompt
     }
 
     return json.dumps(bloco, ensure_ascii=False, indent=2), paragrafos_prompt, mapa_prompt_para_real
 
-
 def extrair_json_da_resposta(texto: str) -> Dict[str, Any]:
-    texto = texto.strip()
+    texto = (texto or "").strip()
+
+    if texto.startswith("```"):
+        texto = re.sub(r"^```(?:json)?\s*", "", texto, flags=re.IGNORECASE)
+        texto = re.sub(r"\s*```$", "", texto)
+
     try:
         return json.loads(texto)
-    except json.JSONDecodeError as exc:
-        raise ValueError("A resposta da IA não é um JSON válido.") from exc
+    except json.JSONDecodeError:
+        inicio = texto.find("{")
+        fim = texto.rfind("}")
 
+        if inicio != -1 and fim != -1 and fim > inicio:
+            trecho = texto[inicio:fim + 1]
+            return json.loads(trecho)
+
+        raise ValueError("A resposta da IA não é um JSON válido.")
+
+def _encontrar_todas_ocorrencias(texto_base: str, trecho: str) -> List[Tuple[int, int]]:
+    """
+    Encontra todas as ocorrências do trecho no texto normalizado.
+    Retorna lista de (start, end) no texto original.
+    """
+    texto_norm, mapa_texto = _normalizar_com_mapa(texto_base)
+    trecho_norm, _ = _normalizar_com_mapa(trecho)
+
+    if not texto_norm or not trecho_norm:
+        return []
+
+    ocorrencias = []
+    pos = texto_norm.find(trecho_norm)
+
+    while pos != -1:
+        start_original = mapa_texto[pos]
+        end_original = mapa_texto[pos + len(trecho_norm) - 1] + 1
+        ocorrencias.append((start_original, end_original))
+        pos = texto_norm.find(trecho_norm, pos + 1)
+
+    return ocorrencias
 
 def _normalizar_com_mapa(texto: str) -> Tuple[str, List[int]]:
     """
@@ -89,26 +115,21 @@ def _normalizar_com_mapa(texto: str) -> Tuple[str, List[int]]:
 
     return "".join(chars[inicio:fim]), mapa[inicio:fim]
 
-
 def _encontrar_trecho_no_texto(texto_base: str, trecho: str) -> Tuple[int, int]:
     """
     Localiza um trecho dentro do texto, tolerando diferenças de espaço.
     Retorna (start, end) no texto original.
+    Se houver mais de uma ocorrência, falha para evitar formatação errada.
     """
-    texto_norm, mapa_texto = _normalizar_com_mapa(texto_base)
-    trecho_norm, _ = _normalizar_com_mapa(trecho)
+    ocorrencias = _encontrar_todas_ocorrencias(texto_base, trecho)
 
-    if not texto_norm or not trecho_norm:
-        raise ValueError("Texto base ou trecho vazio na busca.")
-
-    pos = texto_norm.find(trecho_norm)
-    if pos < 0:
+    if not ocorrencias:
         raise ValueError(f"Trecho não encontrado: {trecho!r}")
 
-    start_original = mapa_texto[pos]
-    end_original = mapa_texto[pos + len(trecho_norm) - 1] + 1
-    return start_original, end_original
+    if len(ocorrencias) > 1:
+        raise ValueError(f"Trecho ambíguo, encontrado mais de uma vez: {trecho!r}")
 
+    return ocorrencias[0]
 
 def validar_resposta(resultado: Dict[str, Any], paragrafos_prompt: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not isinstance(resultado, dict):
@@ -155,15 +176,14 @@ def validar_resposta(resultado: Dict[str, Any], paragrafos_prompt: List[Dict[str
             raise ValueError(f"Segmento {idx}: role inválida: {role}")
 
         texto_paragrafo = mapa_paragrafos[seg_id]
-        texto_item = " ".join(text.split()).casefold()
+        texto_item = normalizar_texto_para_analise(text).casefold()
 
-        if texto_item not in texto_paragrafo.casefold():
+        if texto_item not in normalizar_texto_para_analise(texto_paragrafo).casefold():
             raise ValueError(
                 f"Segmento {idx}: o texto '{text}' não foi encontrado no parágrafo {seg_id}."
             )
 
     return resultado
-
 
 def traduzir_segmentos_para_word(
     resultado: Dict[str, Any],
@@ -173,6 +193,9 @@ def traduzir_segmentos_para_word(
     """
     Converte a resposta da IA para o formato esperado pelo aplicador:
     paragraph + start + end + role
+
+    Se um trecho aparecer mais de uma vez no mesmo parágrafo,
+    aplica a formatação em todas as ocorrências.
     """
     mapa_real_para_texto = {
         int(p["id"]): str(p["text"])
@@ -191,21 +214,22 @@ def traduzir_segmentos_para_word(
             raise ValueError(f"Parágrafo real não encontrado: {real_id}")
 
         texto_paragrafo = mapa_real_para_texto[real_id]
-        start, end = _encontrar_trecho_no_texto(texto_paragrafo, texto_para_busca)
+        ocorrencias = _encontrar_todas_ocorrencias(texto_paragrafo, texto_para_busca)
 
-        segmentos_word.append(
-            {
-                "paragraph": real_id,
-                "start": start,
-                "end": end,
-                "role": seg["role"],
-            }
-        )
+        if not ocorrencias:
+            raise ValueError(f"Trecho não encontrado: {texto_para_busca!r}")
 
-    return {
-        "segments": segmentos_word
-    }
+        for start, end in ocorrencias:
+            segmentos_word.append(
+                {
+                    "paragraph": real_id,
+                    "start": start,
+                    "end": end,
+                    "role": seg["role"],
+                }
+            )
 
+    return {"segments": segmentos_word}
 
 def analisar_documento(
     paragrafos: List[Dict[str, Any]],
@@ -220,61 +244,66 @@ def analisar_documento(
 
     user_content, paragrafos_prompt, mapa_prompt_para_real = formatar_paragrafos_para_prompt(paragrafos)
 
-    # debug
     print(f"Parágrafos enviados: {len(paragrafos)}")
     print(f"Tamanho do prompt: {len(user_content)} caracteres")
+
     if debug_base and nome_documento:
         (debug_base / f"{nome_documento}_prompt.json").write_text(
             user_content,
             encoding="utf-8",
         )
 
+    mensagens = [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT.format(
+                roles="\n".join(
+                    f"- {k}: {v}" for k, v in ROLE_DEFINITIONS.items()
+                )
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "Analise o JSON abaixo.\n\n"
+                "Retorne APENAS um objeto JSON válido, sem markdown, sem comentários e sem texto adicional.\n"
+                "O objeto deve possuir exatamente esta estrutura:\n"
+                "{\n"
+                '  "segments": [\n'
+                "    {\n"
+                '      "id": 1,\n'
+                '      "text": "Giuseppe Rossi",\n'
+                '      "role": "registered_name"\n'
+                "    }\n"
+                "  ]\n"
+                "}\n\n"
+                "Regras:\n"
+                "- cada item em 'segments' representa um trecho a ser formatado;\n"
+                "- 'id' é o id do parágrafo na lista enviada ao modelo;\n"
+                "- 'text' deve aparecer exatamente no parágrafo indicado;\n"
+                "- 'role' deve ser uma das roles permitidas.\n\n"
+                f"{user_content}"
+            ),
+        },
+    ]
+
     try:
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             temperature=GROQ_TEMPERATURE,
-            messages=[
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT.format(
-                        roles="\n".join(
-                            f"- {k}: {v}" for k, v in ROLE_DEFINITIONS.items()
-                        )
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Analise o JSON abaixo.\n\n"
-                        "Retorne APENAS um objeto JSON válido, sem markdown, sem comentários e sem texto adicional.\n\n"
-                        "O objeto deve possuir exatamente esta estrutura:\n"
-                        "{\n"
-                        '  "segments": [\n'
-                        "    {\n"
-                        '      "id": 1,\n'
-                        '      "text": "Giuseppe Rossi",\n'
-                        '      "role": "registered_name"\n'
-                        "    }\n"
-                        "  ]\n"
-                        "}\n\n"
-                        "Regras:\n"
-                        "- cada item em 'segments' representa um trecho a ser formatado;\n"
-                        "- 'id' é o id do parágrafo na lista enviada ao modelo;\n"
-                        "- 'text' deve aparecer exatamente no parágrafo indicado;\n"
-                        "- 'role' deve ser uma das roles permitidas.\n\n"
-                        f"{user_content}"
-                    ),
-                },
-            ],
-            response_format={"type": "json_object"},
+            messages=mensagens,
         )
     except Exception as e:
         print(f"Erro Groq: {e}")
+        if debug_base and nome_documento:
+            (debug_base / f"{nome_documento}_erro_api.txt").write_text(
+                str(e),
+                encoding="utf-8",
+            )
         raise
 
     content = response.choices[0].message.content
 
-    # debug
     if debug_base and nome_documento:
         (debug_base / f"{nome_documento}_resposta.txt").write_text(
             content or "",
@@ -287,6 +316,5 @@ def analisar_documento(
     resultado = extrair_json_da_resposta(content)
     resultado = validar_resposta(resultado, paragrafos_prompt)
 
-    # Converte para o formato esperado pelo aplicador
     resultado_word = traduzir_segmentos_para_word(resultado, paragrafos, mapa_prompt_para_real)
     return resultado_word

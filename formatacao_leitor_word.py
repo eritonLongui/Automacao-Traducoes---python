@@ -48,6 +48,18 @@ def iter_docx_files(base_dir: Path):
     return sorted(arquivos)
 
 
+def normalizar_texto_para_analise(text: str) -> str:
+    """
+    Normaliza texto apenas para prompt/validação.
+    Não altera o documento do Word.
+    """
+    if text is None:
+        return ""
+    text = sanitize_word_text(text)
+    text = text.replace("\u00A0", " ")
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
 def extrair_paragrafos(doc) -> List[Dict[str, Any]]:
     paragrafos = []
     total = doc.Paragraphs.Count

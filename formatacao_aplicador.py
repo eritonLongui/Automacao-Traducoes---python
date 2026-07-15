@@ -10,7 +10,9 @@ def clamped(value: int, minimum: int, maximum: int) -> int:
 
 def resetar_formatacao_range(word_range) -> None:
     """
-    Zera a formatação do trecho inteiro antes de aplicar as regras.
+    Zera apenas atributos de fonte do trecho inteiro.
+    Evita mexer em espaçamento/alinhamento de parágrafo,
+    para preservar a estrutura do documento.
     """
     try:
         font = word_range.Font
@@ -34,19 +36,6 @@ def resetar_formatacao_range(word_range) -> None:
 
     try:
         word_range.HighlightColorIndex = 0
-    except Exception:
-        pass
-
-    try:
-        pf = word_range.ParagraphFormat
-        pf.SpaceBefore = 0
-        pf.SpaceAfter = 0
-        pf.LeftIndent = 0
-        pf.RightIndent = 0
-        pf.FirstLineIndent = 0
-        pf.Alignment = 0
-        pf.KeepTogether = False
-        pf.KeepWithNext = False
     except Exception:
         pass
 

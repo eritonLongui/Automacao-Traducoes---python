@@ -74,7 +74,7 @@ Formato:
         {{
             "id":1,
             "text":"Augustinho Barbieri",
-            "role":"bold_upper"
+            "role":"registered_name"
         }}
     ]
 }}
