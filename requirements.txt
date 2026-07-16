@@ -2,3 +2,4 @@ groq
 google-genai
 pywin32
 python-dotenv
+pymupdf

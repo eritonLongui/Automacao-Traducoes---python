@@ -38,8 +38,9 @@ if not exist saida\.gitkeep type nul > saida\.gitkeep
 attrib +h entrada\.gitkeep
 attrib +h saida\.gitkeep
 
-:: Oculta a pasta __pycache__
+:: Oculta as pastas 
 attrib +h __pycache__
+attrib +h modelos
 
 echo.
 echo ===================================
