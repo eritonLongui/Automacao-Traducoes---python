@@ -4,172 +4,6 @@ from formatacao_config import ROLE_STYLES
 from formatacao_leitor_word import sanitize_word_text
 
 
-# def capitalizar_primeira(texto: str) -> str:
-#     """Ex.: 'certifica' -> 'Certifica'"""
-#     texto = texto or ""
-#     return texto[:1].upper() + texto[1:].lower() if texto else texto
-
-
-# def capitalizar_cada_palavra(texto: str) -> str:
-#     """
-#     Ex.: 'dell'ufficio dello stato civile' -> 'Dell'Ufficio Dello Stato Civile'
-#     """
-#     texto = (texto or "").strip()
-#     if not texto:
-#         return texto
-#     return " ".join(p[:1].upper() + p[1:].lower() if p else p for p in texto.split())
-
-
-# def _iterar_ocorrencias(doc, busca: str, match_case=False, whole_word=False):
-#     rng = doc.Content.Duplicate
-#     find = rng.Find
-#     find.ClearFormatting()
-#     find.Text = busca
-#     find.MatchCase = match_case
-#     find.MatchWholeWord = whole_word
-#     find.Wrap = 1
-
-#     while find.Execute():
-#         yield rng.Duplicate
-#         rng.Start = rng.End
-#         rng.End = doc.Content.End
-
-
-# def _aplicar_anottazione(doc):
-#     """
-#     - 'Anottazione' e 'Anottazioni' sempre em minúsculo e negrito
-#     - Se ocorrerem muito próximas (<= 30 caracteres), apenas a última fica em negrito
-#     """
-#     ocorrencias = []
-
-#     for termo in ("Anottazione", "Anottazioni"):
-#         ocorrencias.extend(list(_iterar_ocorrencias(doc, termo, match_case=False, whole_word=True)))
-
-#     if not ocorrencias:
-#         return
-
-#     # ordena pela posição no documento
-#     ocorrencias.sort(key=lambda r: (r.Start, r.End))
-
-#     # normaliza texto e coloca tudo em negrito inicialmente
-#     for rng in ocorrencias:
-#         rng.Text = rng.Text.lower()
-#         rng.Font.Bold = True
-
-#     # Se duas ocorrências estiverem muito próximas, remove o negrito da anterior
-#     grupo = [ocorrencias[0]]
-
-#     for atual in ocorrencias[1:]:
-#         anterior = grupo[-1]
-#         distancia = atual.Start - anterior.End
-
-#         if distancia <= 30:
-#             grupo.append(atual)
-#         else:
-#             # fecha o grupo anterior: deixa só a última em negrito
-#             for r in grupo[:-1]:
-#                 r.Font.Bold = False
-#             grupo = [atual]
-
-#     # fecha o último grupo
-#     for r in grupo[:-1]:
-#         r.Font.Bold = False
-
-
-# def _aplicar_nome_registrado(doc, nomes_registrado):
-#     """
-#     Recebe:
-#       - string com 1 nome
-#       - lista/tupla com 1 ou 2 nomes
-
-#     Converte o(s) nome(s) encontrado(s) para MAIÚSCULO e negrito.
-#     """
-#     if not nomes_registrado:
-#         return
-
-#     if isinstance(nomes_registrado, str):
-#         lista_nomes = [nomes_registrado]
-#     else:
-#         lista_nomes = [n for n in nomes_registrado if n and str(n).strip()]
-
-#     for nome in lista_nomes:
-#         nome = str(nome).strip()
-#         nome_saida = nome.upper()
-
-#         find_obj = doc.Content.Find
-#         find_obj.ClearFormatting()
-#         find_obj.Replacement.ClearFormatting()
-
-#         find_obj.Text = nome
-#         find_obj.Replacement.Text = nome_saida
-#         find_obj.MatchCase = False
-#         find_obj.Format = False
-#         find_obj.Wrap = 1
-
-#         find_obj.Replacement.Font.Bold = True
-#         find_obj.Execute(Replace=2, Wrap=1)
-
-
-# def _substituir_com_word(doc, busca: str, substituicao: str, bold=None, format_search=False):
-#     find_obj = doc.Content.Find
-#     find_obj.ClearFormatting()
-#     find_obj.Replacement.ClearFormatting()
-
-#     find_obj.Text = busca
-#     find_obj.Replacement.Text = substituicao
-#     find_obj.MatchCase = False
-#     find_obj.Format = format_search
-#     find_obj.Wrap = 1
-
-#     if bold is not None:
-#         find_obj.Replacement.Font.Bold = bool(bold)
-
-#     find_obj.Execute(Replace=2, Wrap=1)
-
-
-# def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
-#     try:
-#         _substituir_com_word(
-#             doc,
-#             "dell'ufficio dello stato civile",
-#             "dell'Ufficio dello Stato Civile",
-#             bold=False,
-#             format_search=False
-#         )
-
-#         _substituir_com_word(
-#             doc,
-#             "ufficiale dello stato civile",
-#             "ufficiale dello stato civile",
-#             bold=False,
-#             format_search=False
-#         )
-
-#         for termo in ("certifica", "certifico", "ufficio", "nascita", "matrimonio"):
-#             _substituir_com_word(
-#                 doc,
-#                 termo,
-#                 capitalizar_primeira(termo),
-#                 bold=False,
-#                 format_search=False
-#             )
-
-#         for termo in ("rettifica",):
-#             _substituir_com_word(
-#                 doc,
-#                 termo,
-#                 termo,
-#                 bold=True,
-#                 format_search=False
-#             )
-
-#         _aplicar_anottazione(doc)
-#         _aplicar_nome_registrado(doc, nomes_registrado)
-
-#     except Exception as e:
-#         print(f"Erro ao aplicar formatações gerais: {e}")
-
-
 WD_FIND_STOP = 0
 WD_COLLAPSE_END = 0
 
@@ -177,6 +11,15 @@ def capitalizar_primeira(texto: str) -> str:
     """Ex.: 'certifica' -> 'Certifica'"""
     texto = texto or ""
     return texto[:1].upper() + texto[1:].lower() if texto else texto
+
+
+def capitalizar_cada_palavra(texto: str) -> str:
+    """Ex.: 'rogerio da silva' -> 'Rogerio Da Silva'"""
+    texto = (texto or "").strip()
+    if not texto:
+        return texto
+    return " ".join(p[:1].upper() + p[1:].lower() if p else p for p in texto.split())
+
 
 def _formatar_ocorrencias(
     doc,
@@ -522,7 +365,7 @@ def aplicar_segmento(doc, segmento: Dict[str, Any]) -> None:
     role = segmento["role"]
     style = ROLE_STYLES.get(role)
 
-    if not style:
+    if not style: # regras fora do ROLE_STYLES
         return
 
     paragraph_id = int(segmento["paragraph"])
@@ -544,6 +387,13 @@ def aplicar_segmento(doc, segmento: Dict[str, Any]) -> None:
 
     base_start = para.Range.Start
     trecho = doc.Range(base_start + start, base_start + end)
+
+    if style.get("capitalize_each_word"):
+        texto_atual = trecho.Text
+        texto_novo = capitalizar_cada_palavra(texto_atual)
+        if texto_novo != texto_atual:
+            trecho.Text = texto_novo
+            trecho = doc.Range(base_start + start, base_start + start + len(texto_novo))
 
     if style.get("uppercase"):
         uppercase_range(trecho)

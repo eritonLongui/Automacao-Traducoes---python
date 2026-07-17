@@ -15,13 +15,11 @@ from formatacao_config import (
     GEMINI_3_FLASH_MODEL,
     GEMINI_TEMPERATURE,
     SYSTEM_PROMPT,
-    ROLE_DEFINITIONS,
+    ROLE_DEFINITIONS_POR_TIPO,
 )
 from formatacao_leitor_word import normalizar_texto_para_analise
 
 load_dotenv()
-
-ALLOWED_DOCUMENT_TYPES = {"nascimento", "casamento", "desconhecido"}
 
 
 def formatar_paragrafos_para_prompt(
@@ -230,7 +228,11 @@ def traduzir_segmentos_para_word(
 
     return {"segments": segmentos_word}
 
-def validar_resposta(resultado: Dict[str, Any], paragrafos_prompt: List[Dict[str, Any]]) -> Dict[str, Any]:
+def validar_resposta(
+    resultado: Dict[str, Any],
+    paragrafos_prompt: List[Dict[str, Any]],
+    role_definitions: dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     if not isinstance(resultado, dict):
         raise ValueError("Resposta da IA precisa ser um objeto JSON.")
 
@@ -240,7 +242,7 @@ def validar_resposta(resultado: Dict[str, Any], paragrafos_prompt: List[Dict[str
     if not isinstance(resultado["segments"], list):
         raise ValueError("'segments' precisa ser uma lista.")
 
-    allowed_roles = set(ROLE_DEFINITIONS.keys())
+    allowed_roles = set(role_definitions.keys())
     mapa_paragrafos = {
         p["id"]: " ".join(str(p["text"]).split())
         for p in paragrafos_prompt
@@ -291,6 +293,7 @@ def _analisar_bloco(
     debug_base: Path | None = None,
     nome_documento: str | None = None,
     sufixo: str = "",
+    role_definitions: dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     user_content, paragrafos_prompt, mapa_prompt_para_real = formatar_paragrafos_para_prompt(paragrafos)
 
@@ -302,21 +305,8 @@ def _analisar_bloco(
         )
 
     system_instruction = SYSTEM_PROMPT.format(
-        roles="\n".join(f"- {k}: {v}" for k, v in ROLE_DEFINITIONS.items())
+        roles="\n".join(f"- {k}: {v}" for k, v in role_definitions.items())
     )
-
-    mensagens_groq = [
-        {"role": "system", "content": system_instruction},
-        {
-            "role": "user",
-            "content": (
-                "Retorne apenas um JSON válido com a chave segments.\n"
-                "Não use markdown, não use comentários, não adicione texto fora do JSON.\n"
-                "Cada item deve conter id, text e role.\n\n"
-                f"{user_content}"
-            ),
-        },
-    ]
 
     prompt_gemini = (
         "Retorne apenas um JSON válido com a chave segments.\n"
@@ -388,7 +378,7 @@ def _analisar_bloco(
         else:
             try:
                 resultado = extrair_json_da_resposta(content)
-                resultado = validar_resposta(resultado, paragrafos_prompt)
+                resultado = validar_resposta(resultado, paragrafos_prompt, role_definitions)
                 resultado = deduplicar_segmentos(resultado)
                 return traduzir_segmentos_para_word(resultado, paragrafos, mapa_prompt_para_real)
             except Exception as e:
@@ -415,12 +405,19 @@ def analisar_documento(
     paragrafos: List[Dict[str, Any]],
     debug_base: Path | None = None,
     nome_documento: str | None = None,
+    tipo_certidao: str | None = None,
 ) -> Dict[str, Any]:
     gemini_api_key = os.environ.get("GEMINI_API_KEY")
     if not gemini_api_key:
         raise EnvironmentError("Defina a variável de ambiente GEMINI_API_KEY.")
 
     gemini_client = genai.Client(api_key=gemini_api_key)
+
+    role_definitions = ROLE_DEFINITIONS_POR_TIPO[tipo_certidao]
+    if role_definitions is None:
+        raise ValueError(
+            f"Tipo de certidão inválido: {tipo_certidao}"
+        )
 
     blocos = dividir_paragrafos_em_blocos(paragrafos, max_paragrafos=3, max_caracteres=2400)
 
@@ -436,6 +433,7 @@ def analisar_documento(
             debug_base=debug_base,
             nome_documento=nome_documento,
             sufixo=f"_bloco{i}",
+            role_definitions=role_definitions,
         )
         segmentos_finais.extend(resultado_bloco["segments"])
 

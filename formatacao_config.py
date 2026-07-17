@@ -21,6 +21,9 @@ ROLE_STYLES = {
     "father_name": {"bold": False, "uppercase": True},
     "mother_name": {"bold": False, "uppercase": True},
     "grandparent_name": {"bold": False, "uppercase": True},
+    "father_in_law": {"bold": False, "uppercase": True},
+    "mother_in_law": {"bold": False, "uppercase": True},
+    "grandparent_spouse_name": {"bold": False, "uppercase": True},
 
     "birth_date": {"bold": True, "uppercase": False},
     "marriage_date": {"bold": True, "uppercase": False},
@@ -36,9 +39,13 @@ ROLE_STYLES = {
     "rectification_title": {"bold": True, "uppercase": False},
     "rectification_old_name": {"bold": False, "uppercase": True},
     "rectification_new_name": {"bold": True, "uppercase": True},
+
+    "witness": {"bold": False, "uppercase": False, "capitalize_each_word": True},
+    "officials": {"bold": False, "uppercase": False, "capitalize_each_word": True},
+    "employees": {"bold": False, "uppercase": False, "capitalize_each_word": True},
 }
 
-ROLE_DEFINITIONS = {
+ROLE_DEFINITIONS_GERAIS = {
     "registered_name": "Nome da pessoa registrada na certidão.",
     "spouse_name": "Nome do cônjuge na certidão de casamento.",
     "maiden_name": "Nome de solteiro(a) / nome anterior antes do casamento.",
@@ -50,14 +57,40 @@ ROLE_DEFINITIONS = {
     "marriage_date": "Data de casamento.",
     "registration_date": "Data de registro / lavratura / transcrição.",
     "death_date": "Data de óbito.",
-    "birth_place": "Local de nascimento.",
-    "marriage_place": "Local do casamento.",
-    "death_place": "Local do óbito.",
+    "birth_place": "Cidade de nascimento.",
+    "marriage_place": "Cidade do casamento.",
+    "death_place": "Cidade do óbito.",
     "annotation_title": "Título de anotação/averbação/observação.",
     "annotation_subject": "Trecho descritivo após um título de anotação quando o título aparece isolado.",
     "rectification_title": "Título de retificação.",
     "rectification_old_name": "Nome antigo na retificação.",
     "rectification_new_name": "Nome novo na retificação.",
+    "witness": "Testemunha do ato / registro",
+    "officials": "Oficial que assinou a certidão / registro",
+    "employees": "Funcionário que assinou a certidão / registro",
+}
+
+ROLE_DEFINITIONS_NASCIMENTO = {
+    "declarant": "Nome do declarante do nascimento.",
+    "registration_place": "Local onde foi registrado / lavrado / transcrito."
+}
+
+ROLE_DEFINITIONS_CASAMENTO = {
+    "father_in_law": "Nome do pai do cônjuge.",
+    "mother_in_law": "Nome da mãe do cônjuge.",
+    "grandparent_spouse_name": "Nome de avô/avó do cônjuge."
+}
+
+ROLE_DEFINITIONS_POR_TIPO = {
+    "nascimento": {
+        **ROLE_DEFINITIONS_GERAIS,
+        **ROLE_DEFINITIONS_NASCIMENTO,
+    },
+    "casamento": {
+        **ROLE_DEFINITIONS_GERAIS,
+        **ROLE_DEFINITIONS_CASAMENTO,
+    },
+    "desconhecido": ROLE_DEFINITIONS_GERAIS,
 }
 
 SYSTEM_PROMPT = """

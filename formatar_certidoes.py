@@ -133,6 +133,7 @@ def processar_arquivo(
 
     try:
         doc = abrir_documento(word, arquivo, read_only=False)
+        tipo_certidao = identificar_tipo_pelo_nome(arquivo.name)
 
         faixa = localizar_faixa_corpo(doc)
         corpo_range = doc.Range(faixa["start_char"], faixa["end_char"])
@@ -156,6 +157,7 @@ def processar_arquivo(
             paragrafos,
             debug_base=debug_base,
             nome_documento=arquivo.stem,
+            tipo_certidao=tipo_certidao,
         )
 
         # debug
