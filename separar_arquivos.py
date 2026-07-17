@@ -130,6 +130,12 @@ def trim_edge_blank_paragraphs(doc):
 
 def remove_leading_layout_noise(doc):
     while doc.Paragraphs.Count > 0:
+
+        # Remove quebra de página manual
+        if doc.Content.End > 1 and doc.Range(0, 1).Text == "\x0c":
+            doc.Range(0, 1).Delete()
+            continue
+
         p = doc.Paragraphs(1)
         txt = clean_text(p.Range.Text)
 

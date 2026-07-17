@@ -403,7 +403,7 @@ def _analisar_bloco(
                 
         if falha:
             if tentativa < 3:
-                print(f"      [A tentativa {tentativa} falhou, aguardando 1 segundo e tentando novamente...]")
+                print(f"      [A tentativa {tentativa} falhou, tentando novamente...]")
                 time.sleep(1)
                 continue
             else:
