@@ -1,37 +1,391 @@
 from typing import Dict, Any, List
 
-def aplicar_formatacoes_gerais(doc) -> None:
-    """
-    Aplica formatações estáticas fixas no documento inteiro, independentes da IA.
-    """
-    try:
-        # 1. "ufficio" -> minúsculo e sem negrito
-        find_obj = doc.Content.Find
-        find_obj.ClearFormatting()
-        find_obj.Replacement.ClearFormatting()
-        
-        find_obj.Text = "ufficio"
-        find_obj.Replacement.Text = "ufficio"
-        find_obj.Replacement.Font.Bold = False
-        find_obj.Format = True
-        find_obj.MatchCase = False
-        find_obj.Execute(Replace=2, Wrap=1)
-
-        # 2. "dell'Ufficio Dello Stato Civile" -> "dell'Ufficio dello Stato Civile"
-        find_obj2 = doc.Content.Find
-        find_obj2.ClearFormatting()
-        find_obj2.Replacement.ClearFormatting()
-        
-        find_obj2.Text = "dell'ufficio dello stato civile"
-        find_obj2.Replacement.Text = "dell'Ufficio dello Stato Civile"
-        find_obj2.Format = False
-        find_obj2.MatchCase = False
-        find_obj2.Execute(Replace=2, Wrap=1)
-    except Exception as e:
-        print(f"Erro ao aplicar formatações gerais: {e}")
-
 from formatacao_config import ROLE_STYLES
 from formatacao_leitor_word import sanitize_word_text
+
+
+# def capitalizar_primeira(texto: str) -> str:
+#     """Ex.: 'certifica' -> 'Certifica'"""
+#     texto = texto or ""
+#     return texto[:1].upper() + texto[1:].lower() if texto else texto
+
+
+# def capitalizar_cada_palavra(texto: str) -> str:
+#     """
+#     Ex.: 'dell'ufficio dello stato civile' -> 'Dell'Ufficio Dello Stato Civile'
+#     """
+#     texto = (texto or "").strip()
+#     if not texto:
+#         return texto
+#     return " ".join(p[:1].upper() + p[1:].lower() if p else p for p in texto.split())
+
+
+# def _iterar_ocorrencias(doc, busca: str, match_case=False, whole_word=False):
+#     rng = doc.Content.Duplicate
+#     find = rng.Find
+#     find.ClearFormatting()
+#     find.Text = busca
+#     find.MatchCase = match_case
+#     find.MatchWholeWord = whole_word
+#     find.Wrap = 1
+
+#     while find.Execute():
+#         yield rng.Duplicate
+#         rng.Start = rng.End
+#         rng.End = doc.Content.End
+
+
+# def _aplicar_anottazione(doc):
+#     """
+#     - 'Anottazione' e 'Anottazioni' sempre em minúsculo e negrito
+#     - Se ocorrerem muito próximas (<= 30 caracteres), apenas a última fica em negrito
+#     """
+#     ocorrencias = []
+
+#     for termo in ("Anottazione", "Anottazioni"):
+#         ocorrencias.extend(list(_iterar_ocorrencias(doc, termo, match_case=False, whole_word=True)))
+
+#     if not ocorrencias:
+#         return
+
+#     # ordena pela posição no documento
+#     ocorrencias.sort(key=lambda r: (r.Start, r.End))
+
+#     # normaliza texto e coloca tudo em negrito inicialmente
+#     for rng in ocorrencias:
+#         rng.Text = rng.Text.lower()
+#         rng.Font.Bold = True
+
+#     # Se duas ocorrências estiverem muito próximas, remove o negrito da anterior
+#     grupo = [ocorrencias[0]]
+
+#     for atual in ocorrencias[1:]:
+#         anterior = grupo[-1]
+#         distancia = atual.Start - anterior.End
+
+#         if distancia <= 30:
+#             grupo.append(atual)
+#         else:
+#             # fecha o grupo anterior: deixa só a última em negrito
+#             for r in grupo[:-1]:
+#                 r.Font.Bold = False
+#             grupo = [atual]
+
+#     # fecha o último grupo
+#     for r in grupo[:-1]:
+#         r.Font.Bold = False
+
+
+# def _aplicar_nome_registrado(doc, nomes_registrado):
+#     """
+#     Recebe:
+#       - string com 1 nome
+#       - lista/tupla com 1 ou 2 nomes
+
+#     Converte o(s) nome(s) encontrado(s) para MAIÚSCULO e negrito.
+#     """
+#     if not nomes_registrado:
+#         return
+
+#     if isinstance(nomes_registrado, str):
+#         lista_nomes = [nomes_registrado]
+#     else:
+#         lista_nomes = [n for n in nomes_registrado if n and str(n).strip()]
+
+#     for nome in lista_nomes:
+#         nome = str(nome).strip()
+#         nome_saida = nome.upper()
+
+#         find_obj = doc.Content.Find
+#         find_obj.ClearFormatting()
+#         find_obj.Replacement.ClearFormatting()
+
+#         find_obj.Text = nome
+#         find_obj.Replacement.Text = nome_saida
+#         find_obj.MatchCase = False
+#         find_obj.Format = False
+#         find_obj.Wrap = 1
+
+#         find_obj.Replacement.Font.Bold = True
+#         find_obj.Execute(Replace=2, Wrap=1)
+
+
+# def _substituir_com_word(doc, busca: str, substituicao: str, bold=None, format_search=False):
+#     find_obj = doc.Content.Find
+#     find_obj.ClearFormatting()
+#     find_obj.Replacement.ClearFormatting()
+
+#     find_obj.Text = busca
+#     find_obj.Replacement.Text = substituicao
+#     find_obj.MatchCase = False
+#     find_obj.Format = format_search
+#     find_obj.Wrap = 1
+
+#     if bold is not None:
+#         find_obj.Replacement.Font.Bold = bool(bold)
+
+#     find_obj.Execute(Replace=2, Wrap=1)
+
+
+# def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
+#     try:
+#         _substituir_com_word(
+#             doc,
+#             "dell'ufficio dello stato civile",
+#             "dell'Ufficio dello Stato Civile",
+#             bold=False,
+#             format_search=False
+#         )
+
+#         _substituir_com_word(
+#             doc,
+#             "ufficiale dello stato civile",
+#             "ufficiale dello stato civile",
+#             bold=False,
+#             format_search=False
+#         )
+
+#         for termo in ("certifica", "certifico", "ufficio", "nascita", "matrimonio"):
+#             _substituir_com_word(
+#                 doc,
+#                 termo,
+#                 capitalizar_primeira(termo),
+#                 bold=False,
+#                 format_search=False
+#             )
+
+#         for termo in ("rettifica",):
+#             _substituir_com_word(
+#                 doc,
+#                 termo,
+#                 termo,
+#                 bold=True,
+#                 format_search=False
+#             )
+
+#         _aplicar_anottazione(doc)
+#         _aplicar_nome_registrado(doc, nomes_registrado)
+
+#     except Exception as e:
+#         print(f"Erro ao aplicar formatações gerais: {e}")
+
+
+WD_FIND_STOP = 0
+WD_COLLAPSE_END = 0
+
+def capitalizar_primeira(texto: str) -> str:
+    """Ex.: 'certifica' -> 'Certifica'"""
+    texto = texto or ""
+    return texto[:1].upper() + texto[1:].lower() if texto else texto
+
+def _formatar_ocorrencias(
+    doc,
+    busca: str,
+    texto_saida: str,
+    *,
+    bold=None,
+    match_case=False,
+    whole_word=False,
+    ) -> int:
+    """
+    Localiza ocorrências de `busca` aceitando qualquer capitalização
+    e força o texto de saída exatamente como informado.
+
+    Retorna a quantidade de ocorrências alteradas.
+    """
+    if not busca:
+        return 0
+
+    total = 0
+    rng = doc.Content.Duplicate
+    find = rng.Find
+
+    find.ClearFormatting()
+    find.Text = busca
+    find.MatchCase = match_case
+    find.MatchWholeWord = whole_word
+    find.Forward = True
+    find.Wrap = WD_FIND_STOP
+
+    while find.Execute():
+        rng.Text = texto_saida
+
+        if bold is not None:
+            rng.Font.Bold = bool(bold)
+
+        total += 1
+
+        # Continua a busca depois do texto recém-substituído
+        rng.Collapse(WD_COLLAPSE_END)
+        rng.End = doc.Content.End
+
+    return total
+
+
+def _coletar_ocorrencias(doc, busca: str, match_case=False, whole_word=False):
+    """
+    Coleta posições (Start, End) de todas as ocorrências encontradas.
+    Usado apenas para a regra especial de Anottazione/Anottazioni.
+    """
+    ocorrencias = []
+
+    if not busca:
+        return ocorrencias
+
+    rng = doc.Content.Duplicate
+    find = rng.Find
+
+    find.ClearFormatting()
+    find.Text = busca
+    find.MatchCase = match_case
+    find.MatchWholeWord = whole_word
+    find.Forward = True
+    find.Wrap = WD_FIND_STOP
+
+    while find.Execute():
+        ocorrencias.append((rng.Start, rng.End))
+        rng.Start = rng.End
+        rng.End = doc.Content.End
+
+    return ocorrencias
+
+
+def _aplicar_anottazione(doc):
+    """
+    - 'Anottazione' e 'Anottazioni' sempre em minúsculo e negrito
+    - Se ocorrerem muito próximas (<= 30 caracteres), apenas a última fica em negrito
+    """
+    ocorrencias = []
+
+    for termo in ("Anottazione", "Anottazioni"):
+        ocorrencias.extend(
+            _coletar_ocorrencias(doc, termo, match_case=False, whole_word=True)
+        )
+
+    if not ocorrencias:
+        return
+
+    ocorrencias.sort(key=lambda r: (r[0], r[1]))
+
+    grupos = []
+    grupo_atual = [ocorrencias[0]]
+
+    for atual in ocorrencias[1:]:
+        anterior = grupo_atual[-1]
+        distancia = atual[0] - anterior[1]
+
+        if distancia <= 30:
+            grupo_atual.append(atual)
+        else:
+            grupos.append(grupo_atual)
+            grupo_atual = [atual]
+
+    grupos.append(grupo_atual)
+
+    # Processa de trás para frente para não bagunçar as posições originais
+    for grupo in reversed(grupos):
+        for idx, (inicio, fim) in enumerate(reversed(grupo)):
+            rng = doc.Range(inicio, fim)
+            rng.Text = rng.Text.lower()
+            rng.Font.Bold = (idx == 0)  # somente a última do grupo fica em negrito
+
+
+def _normalizar_lista_nomes(nomes_registrado):
+    if not nomes_registrado:
+        return []   
+
+    if isinstance(nomes_registrado, str):
+        lista = [nomes_registrado]
+    else:
+        lista = nomes_registrado
+
+    return [str(n).strip() for n in lista if n and str(n).strip()]
+
+def _aplicar_nome_registrado(doc, nomes_registrado):
+    """
+    Recebe:
+    - string com 1 nome
+    - lista/tupla com 1 ou 2 nomes
+
+    Converte o(s) nome(s) encontrado(s) para MAIÚSCULO e negrito.
+    """
+    for nome in _normalizar_lista_nomes(nomes_registrado):
+        _formatar_ocorrencias(
+            doc,
+            nome,
+            nome.upper(),
+            bold=True,
+            match_case=False,
+            whole_word=False,
+        )
+
+
+def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
+    """
+    Aplica formatações estáticas fixas no documento inteiro,
+    independentes da IA.
+    """
+    try:
+        # Caso específico: ajuste de caixa dentro da frase
+        _formatar_ocorrencias(
+        doc,
+        "dell'ufficio dello stato civile",
+        "dell'Ufficio dello Stato Civile",
+        bold=False,
+        match_case=False,
+        whole_word=False,
+        )
+
+        # Frase que deve ficar sempre minúscula
+        for termo in ("ufficiale dello stato civile", "dell'atto di stato civile", "e ne do fede"):
+            _formatar_ocorrencias(
+                doc,
+                termo,
+                termo,
+                bold=False,
+                match_case=False,
+                whole_word=False,
+            )
+
+        # Palavras que devem ficar com inicial maiúscula e sem negrito
+        for termo in ("certifica", "certifico", "ufficio", "nascita", "matrimonio"):
+            _formatar_ocorrencias(
+                doc,
+                termo,
+                capitalizar_primeira(termo),
+                bold=False,
+                match_case=False,
+                whole_word=True,
+            )
+
+        # Palavras que devem ficar com inicial maiúscula e em negrito
+        for termo in ("annotazioni"):
+            _formatar_ocorrencias(
+                doc,
+                termo,
+                capitalizar_primeira(termo),
+                bold=False,
+                match_case=False,
+                whole_word=True,
+            )
+
+        # Palavras que devem ficar minúsculas e em negrito
+        for termo in ("rettifica",):
+            _formatar_ocorrencias(
+                doc,
+                termo,
+                termo,
+                bold=True,
+                match_case=False,
+                whole_word=True,
+            )
+
+        _aplicar_anottazione(doc)
+        _aplicar_nome_registrado(doc, nomes_registrado)
+
+    except Exception as e:
+        print(f"Erro ao aplicar formatações gerais: {e}")
+        raise
 
 
 def clamped(value: int, minimum: int, maximum: int) -> int:

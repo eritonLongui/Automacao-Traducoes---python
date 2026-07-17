@@ -32,6 +32,24 @@ def identificar_tipo_pelo_nome(nome_arquivo: str) -> str:
 
     return "desconhecido"
 
+def extrair_nomes_arquivo(nome_arquivo: str):
+    tipo = identificar_tipo_pelo_nome(nome_arquivo)
+    stem = Path(nome_arquivo).stem.strip()
+
+    if tipo == "nascimento":
+        return [
+            re.sub(r"^CN\s+", "", stem, flags=re.IGNORECASE).strip()
+        ]
+
+    if tipo == "casamento":
+        nomes = re.sub(r"^CC\s+", "", stem, flags=re.IGNORECASE)
+
+        return [
+            nome.strip()
+            for nome in re.split(r"\s+e\s+", nomes, flags=re.IGNORECASE)
+        ]
+
+    return []
 
 def criar_pastas(base_saida: Path, base_debug: Path) -> None:
     base_saida.mkdir(parents=True, exist_ok=True)
@@ -146,8 +164,14 @@ def processar_arquivo(
             encoding="utf-8",
         )
 
-        aplicar_formatacoes_gerais(doc)
-        aplicar_segmentos(doc, analise["segments"])
+        nomes_registrado = extrair_nomes_arquivo(arquivo.name)
+
+        aplicar_formatacoes_gerais(
+            doc,
+            nomes_registrado=nomes_registrado,
+        )
+
+        aplicar_segmentos(doc, analise["segments"]) 
 
         doc.SaveAs2(str(out_path), FileFormat=16)
 
