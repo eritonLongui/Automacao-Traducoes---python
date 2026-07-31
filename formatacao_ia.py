@@ -16,6 +16,7 @@ from formatacao_config import (
     GEMINI_TEMPERATURE,
     SYSTEM_PROMPT,
     ROLE_DEFINITIONS_POR_TIPO,
+    ROLE_ALTERACAO_PRIMEIRA_OCORRENCIA,
 )
 from formatacao_leitor_word import normalizar_texto_para_analise
 
@@ -47,6 +48,7 @@ def formatar_paragrafos_para_prompt(
 
     return json.dumps(bloco, ensure_ascii=False, indent=2), paragrafos_prompt, mapa_prompt_para_real
 
+
 def extrair_json_da_resposta(texto: str) -> Dict[str, Any]:
     texto = (texto or "").strip()
 
@@ -65,6 +67,7 @@ def extrair_json_da_resposta(texto: str) -> Dict[str, Any]:
             return json.loads(trecho)
 
         raise ValueError("A resposta da IA não é um JSON válido.")
+
 
 def _encontrar_todas_ocorrencias(texto_base: str, trecho: str) -> List[Tuple[int, int]]:
     """
@@ -88,6 +91,7 @@ def _encontrar_todas_ocorrencias(texto_base: str, trecho: str) -> List[Tuple[int
 
     return ocorrencias
 
+
 def deduplicar_segmentos(resultado: Dict[str, Any]) -> Dict[str, Any]:
     vistos = set()
     segmentos_limpos = []
@@ -103,6 +107,7 @@ def deduplicar_segmentos(resultado: Dict[str, Any]) -> Dict[str, Any]:
         segmentos_limpos.append(seg)
 
     return {"segments": segmentos_limpos}
+
 
 def _normalizar_com_mapa(texto: str) -> Tuple[str, List[int]]:
     """
@@ -153,34 +158,6 @@ def _normalizar_com_mapa(texto: str) -> Tuple[str, List[int]]:
 
     return "".join(chars[inicio:fim]), mapa[inicio:fim]
 
-def dividir_paragrafos_em_blocos(
-    paragrafos: List[Dict[str, Any]],
-    max_paragrafos: int = 2,
-    max_caracteres: int = 1600,
-) -> List[List[Dict[str, Any]]]:
-    blocos = []
-    bloco_atual = []
-    tamanho_atual = 0
-
-    for p in paragrafos:
-        texto = str(p.get("text", ""))
-        tamanho_texto = len(texto)
-
-        if bloco_atual and (
-            len(bloco_atual) >= max_paragrafos
-            or tamanho_atual + tamanho_texto > max_caracteres
-        ):
-            blocos.append(bloco_atual)
-            bloco_atual = []
-            tamanho_atual = 0
-
-        bloco_atual.append(p)
-        tamanho_atual += tamanho_texto
-
-    if bloco_atual:
-        blocos.append(bloco_atual)
-
-    return blocos
 
 def traduzir_segmentos_para_word(
     resultado: Dict[str, Any],
@@ -215,6 +192,9 @@ def traduzir_segmentos_para_word(
 
         if not ocorrencias:
             raise ValueError(f"Trecho não encontrado: {texto_para_busca!r}")
+        
+        if seg["role"] in ROLE_ALTERACAO_PRIMEIRA_OCORRENCIA:
+            ocorrencias = ocorrencias[:1]
 
         for start, end in ocorrencias:
             segmentos_word.append(
@@ -227,6 +207,7 @@ def traduzir_segmentos_para_word(
             )
 
     return {"segments": segmentos_word}
+
 
 def validar_resposta(
     resultado: Dict[str, Any],
@@ -287,18 +268,49 @@ def validar_resposta(
 
     return resultado
 
-def _analisar_bloco(
+
+def interseccionar_resultados(
+    resultado_1: Dict[str, Any],
+    resultado_2: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Mantém apenas os segmentos que apareceram nas DUAS análises.
+    Comparação por id + role + text normalizado.
+    """
+    def chave(seg: Dict[str, Any]) -> Tuple[int, str, str]:
+        texto_norm, _ = _normalizar_com_mapa(str(seg.get("text", "")))
+        return (
+            int(seg["id"]),
+            str(seg["role"]),
+            texto_norm,
+        )
+
+    segmentos_2 = {chave(seg): seg for seg in resultado_2.get("segments", [])}
+
+    segmentos_finais = []
+    vistos = set()
+
+    for seg in resultado_1.get("segments", []):
+        k = chave(seg)
+        if k in segmentos_2 and k not in vistos:
+            segmentos_finais.append(seg)
+            vistos.add(k)
+
+    return {"segments": segmentos_finais}
+
+
+def _analisar_rodada(
     paragrafos: List[Dict[str, Any]],
     gemini_client: genai.Client,
     debug_base: Path | None = None,
     nome_documento: str | None = None,
-    sufixo: str = "",
+    rodada: int = 1,
     role_definitions: dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    user_content, paragrafos_prompt, mapa_prompt_para_real = formatar_paragrafos_para_prompt(paragrafos)
+    user_content, paragrafos_prompt, _ = formatar_paragrafos_para_prompt(paragrafos)
 
     if debug_base and nome_documento:
-        nome_arquivo_prompt = f"{nome_documento}_prompt{sufixo}.json"
+        nome_arquivo_prompt = f"{nome_documento}_prompt_rodada{rodada}.json"
         (debug_base / nome_arquivo_prompt).write_text(
             user_content,
             encoding="utf-8",
@@ -311,95 +323,72 @@ def _analisar_bloco(
     prompt_gemini = (
         "Retorne apenas um JSON válido com a chave segments.\n"
         "Não use markdown, não use comentários, não adicione texto fora do JSON.\n"
-        "Cada item deve conter id, text e role.\n\n"
+        "Cada item deve conter id, text e role.\n"
         f"{user_content}"
     )
 
-    ultimo_content = None
-
     for tentativa in range(1, 4):
-        content = None
-        
+        content = ""
+
         try:
-            if tentativa == 1:
-                # 1. Gemini 3.1 Flash-Lite
-                response = gemini_client.models.generate_content(
-                    model=GEMINI_FLASH_LITE_MODEL,
-                    contents=prompt_gemini,
-                    config=genai.types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                        temperature=GEMINI_TEMPERATURE,
-                    )
+            response = gemini_client.models.generate_content(
+                model=(
+                    GEMINI_FLASH_LITE_MODEL
+                    if tentativa == 1
+                    else GEMINI_FLASH_MODEL
+                    if tentativa == 2
+                    else GEMINI_3_FLASH_MODEL
+                ),
+                contents=prompt_gemini,
+                config=genai.types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=GEMINI_TEMPERATURE,
                 )
-                content = response.text
-
-            elif tentativa == 2:
-                # 2. Gemini 2.5 Flash
-                response = gemini_client.models.generate_content(
-                    model=GEMINI_FLASH_MODEL,
-                    contents=prompt_gemini,
-                    config=genai.types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                        temperature=GEMINI_TEMPERATURE,
-                    )
-                )
-                content = response.text
-
-            elif tentativa == 3:
-                # 3. Gemini 3 Flash
-                response = gemini_client.models.generate_content(
-                    model=GEMINI_3_FLASH_MODEL,
-                    contents=prompt_gemini,
-                    config=genai.types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                        temperature=GEMINI_TEMPERATURE,
-                    )
-                )
-                content = response.text
-                
-        except Exception as api_err:
+            )
+            content = response.text or ""
+        except Exception:
             content = ""
 
-        ultimo_content = content
-
         if debug_base and nome_documento:
-            nome_arquivo_resposta = f"{nome_documento}_resposta{sufixo}_tentativa{tentativa}.txt"
+            nome_arquivo_resposta = (
+                f"{nome_documento}_resposta_rodada{rodada}_tentativa{tentativa}.txt"
+            )
             (debug_base / nome_arquivo_resposta).write_text(
-                content or "",
+                content,
                 encoding="utf-8",
             )
 
-        falha = False
-        erro_msg = ""
-        
         if not content:
-            falha = True
-            erro_msg = "A IA retornou resposta vazia ou houve erro de API."
-        else:
-            try:
-                resultado = extrair_json_da_resposta(content)
-                resultado = validar_resposta(resultado, paragrafos_prompt, role_definitions)
-                resultado = deduplicar_segmentos(resultado)
-                return traduzir_segmentos_para_word(resultado, paragrafos, mapa_prompt_para_real)
-            except Exception as e:
-                if debug_base and nome_documento:
-                    nome_erro = f"{nome_documento}_erro_parse{sufixo}_tentativa{tentativa}.txt"
-                    (debug_base / nome_erro).write_text(
-                        str(e),
-                        encoding="utf-8",
-                    )
-                falha = True
-                erro_msg = str(e)
-                
-        if falha:
             if tentativa < 3:
-                print(f"      [A tentativa {tentativa} falhou, tentando novamente...]")
+                print(f"      [Rodada {rodada}, tentativa {tentativa} falhou, tentando novamente...]")
                 time.sleep(1)
                 continue
-            else:
-                raise ValueError(f"Falha ao interpretar resposta da IA após {tentativa} tentativas: {erro_msg}")
+            raise ValueError(f"A IA retornou resposta vazia na rodada {rodada}.")
 
-    raise ValueError("Falha inesperada na análise do bloco.")
+        try:
+            resultado = extrair_json_da_resposta(content)
+            resultado = validar_resposta(resultado, paragrafos_prompt, role_definitions)
+            resultado = deduplicar_segmentos(resultado)
+            return resultado
+        except Exception as e:
+            if debug_base and nome_documento:
+                nome_erro = f"{nome_documento}_erro_parse_rodada{rodada}_tentativa{tentativa}.txt"
+                (debug_base / nome_erro).write_text(
+                    str(e),
+                    encoding="utf-8",
+                )
+
+            if tentativa < 3:
+                print(f"      [Rodada {rodada}, tentativa {tentativa} inválida, tentando novamente...")
+                time.sleep(1)
+                continue
+
+            raise ValueError(
+                f"Falha ao interpretar resposta da IA na rodada {rodada}: {e}"
+            )
+
+    raise ValueError("Falha inesperada na análise da rodada.")
+
 
 def analisar_documento(
     paragrafos: List[Dict[str, Any]],
@@ -415,26 +404,32 @@ def analisar_documento(
 
     role_definitions = ROLE_DEFINITIONS_POR_TIPO[tipo_certidao]
     if role_definitions is None:
-        raise ValueError(
-            f"Tipo de certidão inválido: {tipo_certidao}"
-        )
+        raise ValueError(f"Tipo de certidão inválido: {tipo_certidao}")
 
-    blocos = dividir_paragrafos_em_blocos(paragrafos, max_paragrafos=3, max_caracteres=2400)
+    print("Analisando documento inteiro - rodada 1...")
+    resultado_1 = _analisar_rodada(
+        paragrafos,
+        gemini_client=gemini_client,
+        debug_base=debug_base,
+        nome_documento=nome_documento,
+        rodada=1,
+        role_definitions=role_definitions,
+    )
 
-    print(f"Blocos enviados à IA: {len(blocos)}")
+    print("Analisando documento inteiro - rodada 2...")
+    resultado_2 = _analisar_rodada(
+        paragrafos,
+        gemini_client=gemini_client,
+        debug_base=debug_base,
+        nome_documento=nome_documento,
+        rodada=2,
+        role_definitions=role_definitions,
+    )
 
-    segmentos_finais = []
+    resultado_final = interseccionar_resultados(resultado_1, resultado_2)
 
-    for i, bloco in enumerate(blocos, start=1):
-        print(f"Analisando bloco {i}/{len(blocos)}...")
-        resultado_bloco = _analisar_bloco(
-            bloco,
-            gemini_client=gemini_client,
-            debug_base=debug_base,
-            nome_documento=nome_documento,
-            sufixo=f"_bloco{i}",
-            role_definitions=role_definitions,
-        )
-        segmentos_finais.extend(resultado_bloco["segments"])
+    if not resultado_final["segments"]:
+        raise ValueError("Nenhum segmento coincidiu nas duas análises.")
 
-    return {"segments": segmentos_finais}
+    _, _, mapa_prompt_para_real = formatar_paragrafos_para_prompt(paragrafos)
+    return traduzir_segmentos_para_word(resultado_final, paragrafos, mapa_prompt_para_real)

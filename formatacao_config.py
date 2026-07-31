@@ -27,7 +27,6 @@ ROLE_STYLES = {
 
     "birth_date": {"bold": True, "uppercase": False},
     "marriage_date": {"bold": True, "uppercase": False},
-    "registration_date": {"bold": True, "uppercase": False},
     "death_date": {"bold": True, "uppercase": False},
 
     "birth_place": {"bold": True, "uppercase": False},
@@ -91,6 +90,15 @@ ROLE_DEFINITIONS_POR_TIPO = {
         **ROLE_DEFINITIONS_CASAMENTO,
     },
     "desconhecido": ROLE_DEFINITIONS_GERAIS,
+}
+
+ROLE_ALTERACAO_PRIMEIRA_OCORRENCIA = {
+    "birth_date",
+    "marriage_date",
+    "death_date",
+    "birth_place",
+    "marriage_place",
+    "death_place",
 }
 
 SYSTEM_PROMPT = """
