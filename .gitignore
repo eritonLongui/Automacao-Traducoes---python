@@ -35,3 +35,6 @@ debug_ia/
 
 # Chaves de API
 .env
+
+# Arquivo de credenciais
+numero-traducao-82a46e53b009.json

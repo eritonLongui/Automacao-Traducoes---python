@@ -169,7 +169,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
     independentes da IA.
     """
     try:
-        # Caso específico: ajuste de caixa dentro da frase
+        # Casos específicos: ajuste de caixa dentro da frase
         _formatar_ocorrencias(
         doc,
         "dell'ufficio dello stato civile",
@@ -178,9 +178,49 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
         match_case=False,
         whole_word=False,
         )
+        _formatar_ocorrencias(
+        doc,
+        "all'ufficio di stato civile",
+        "all'Ufficio di Stato Civile",
+        bold=False,
+        match_case=False,
+        whole_word=False,
+        )
+        _formatar_ocorrencias(
+        doc,
+        "annotazione del cpf",
+        "Annotazione del CPF",
+        bold=False,
+        match_case=False,
+        whole_word=False,
+        )
+        _formatar_ocorrencias(
+        doc,
+        "[A tergo riprende]",
+        "[A tergo riprende]",
+        bold=True,
+        match_case=False,
+        whole_word=False,
+        )
 
-        # Frase que deve ficar sempre minúscula
-        for termo in ("ufficiale dello stato civile", "dell'atto di stato civile", "e ne do fede"):
+        # Frases que deve ficar sempre minúscula
+        for termo in (
+            "ufficiale dello stato civile",
+            "dell'atto di stato civile",
+            "e ne do fede",
+            "ufficiale",
+            "nulla più",
+            "nulla di più",
+            "nulla più da certificare",
+            "certificato a trascrizione integrale",
+            "comunione dei beni",
+            "aerogramma",
+            "null'altro",
+            "nato a",
+            "nata a",
+            "dello",
+            "funzionario incaricato"
+        ):
             _formatar_ocorrencias(
                 doc,
                 termo,
@@ -191,7 +231,21 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
             )
 
         # Palavras que devem ficar com inicial maiúscula e sem negrito
-        for termo in ("certifica", "certifico", "ufficio", "nascita", "matrimonio"):
+        for termo in (
+            "certifica",
+            "certifico",
+            "ufficio",
+            "nascita",
+            "matrimonio",
+            "osservazioni",
+            "lo sposo",
+            "la sposa",
+            "comunicazione",
+            "stato civile",
+            "nihil",
+            "da certificare"
+            "atto di"
+        ):
             _formatar_ocorrencias(
                 doc,
                 termo,
@@ -202,7 +256,10 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
             )
 
         # Palavras que devem ficar com inicial maiúscula e em negrito
-        for termo in ("annotazioni"):
+        for termo in (
+            "annotazioni",
+            "annotazione"
+        ):
             _formatar_ocorrencias(
                 doc,
                 termo,
