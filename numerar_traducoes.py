@@ -40,7 +40,7 @@ LOGGER = logging.getLogger("numerar_traducoes")
 # =========================
 
 BASE_DIR_DEFAULT = "./saida"
-DEFAULT_FOOTER_PLACEHOLDERS = [r"Tradução nº [0-9]@/[0-9][0-9][0-9][0-9]C"]
+DEFAULT_FOOTER_PLACEHOLDERS = [r"Tradução"]
 TRANSLATION_SUFFIX = "C"
 SUPPORTED_EXTENSIONS = {".docx"}
 
@@ -333,13 +333,21 @@ class SheetIndex:
 # =========================
 
 
+def _normalize_footer_text(value: str) -> str:
+    text = unicodedata.normalize("NFKD", str(value))
+    text = text.replace("\xa0", " ")
+    text = text.replace("\r", " ").replace("\x07", " ")
+    text = text.replace("n°", "nº").replace("N°", "Nº")
+    text = re.sub(r"\s+", " ", text).strip().casefold()
+    return text
+
+
 def update_word_document_footer(path: Path, translation_number: str, patterns: list[str]) -> int:
     if win32com is None:
         raise DocumentError(f"pywin32 / win32com não está disponível: {_win32_import_error}")
 
     word = None
     doc = None
-    changed = 0
 
     try:
         word = win32com.DispatchEx("Word.Application")
@@ -349,28 +357,33 @@ def update_word_document_footer(path: Path, translation_number: str, patterns: l
         doc = word.Documents.Open(str(path.resolve()))
         replacement_text = f"Tradução nº {translation_number}"
 
-        for section in doc.Sections:
-            for footer_index in (1, 2, 3):  # Primary, FirstPage, EvenPages
-                try:
-                    footer_range = section.Footers(footer_index).Range
-                except Exception:
-                    continue
+        section = doc.Sections(1)
+        footer = section.Footers(1).Range
 
-                for pattern in patterns:
-                    find = footer_range.Find
-                    find.ClearFormatting()
-                    find.Replacement.ClearFormatting()
-                    find.Text = pattern
-                    find.MatchWildcards = True
-                    find.Replacement.Text = replacement_text
+        if footer.Paragraphs.Count < 2:
+            raise DocumentError(
+                f"Rodapé inesperado em {path.name}: esperava pelo menos 2 parágrafos no footer."
+            )
 
-                    if find.Execute(Replace=2):
-                        changed += 1
+        target_paragraph = footer.Paragraphs(2)
+        current_text = str(target_paragraph.Range.Text)
 
-        if changed > 0:
-            doc.Save()
+        LOGGER.info("Texto atual do rodapé alvo: %r", current_text)
 
-        return changed
+        target_paragraph.Range.Text = replacement_text
+
+        # Confirma se a troca foi aplicada
+        updated_text = str(target_paragraph.Range.Text)
+        LOGGER.info("Texto após substituição: %r", updated_text)
+
+        if replacement_text not in updated_text:
+            raise DocumentError(
+                f"A substituição no rodapé parece não ter sido aplicada em {path.name}. "
+                f"Esperado: {replacement_text!r}. Encontrado: {updated_text!r}"
+            )
+
+        doc.Save()
+        return 1
 
     finally:
         if doc is not None:
