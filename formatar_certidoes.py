@@ -177,6 +177,7 @@ def processar_arquivo(
         aplicar_formatacoes_gerais(
             doc,
             nomes_registrado=nomes_registrado,
+            corpo_range=corpo_range,
         )
 
         aplicar_segmentos(doc, analise["segments"]) 

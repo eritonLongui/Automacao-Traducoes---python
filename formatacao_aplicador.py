@@ -29,6 +29,7 @@ def _formatar_ocorrencias(
     bold=None,
     match_case=False,
     whole_word=False,
+    corpo_range=None,
     ) -> int:
     """
     Localiza ocorrências de `busca` aceitando qualquer capitalização
@@ -40,8 +41,10 @@ def _formatar_ocorrencias(
         return 0
 
     total = 0
-    rng = doc.Content.Duplicate
+    rng = corpo_range.Duplicate if corpo_range else doc.Content.Duplicate
     find = rng.Find
+    
+    search_end = rng.End
 
     find.ClearFormatting()
     find.Text = busca
@@ -51,6 +54,9 @@ def _formatar_ocorrencias(
     find.Wrap = WD_FIND_STOP
 
     while find.Execute():
+        if rng.Start >= search_end:
+            break
+            
         rng.Text = texto_saida
 
         if bold is not None:
@@ -60,12 +66,12 @@ def _formatar_ocorrencias(
 
         # Continua a busca depois do texto recém-substituído
         rng.Collapse(WD_COLLAPSE_END)
-        rng.End = doc.Content.End
+        rng.End = search_end
 
     return total
 
 
-def _coletar_ocorrencias(doc, busca: str, match_case=False, whole_word=False):
+def _coletar_ocorrencias(doc, busca: str, match_case=False, whole_word=False, corpo_range=None):
     """
     Coleta posições (Start, End) de todas as ocorrências encontradas.
     Usado apenas para a regra especial de Anottazione/Anottazioni.
@@ -75,8 +81,10 @@ def _coletar_ocorrencias(doc, busca: str, match_case=False, whole_word=False):
     if not busca:
         return ocorrencias
 
-    rng = doc.Content.Duplicate
+    rng = corpo_range.Duplicate if corpo_range else doc.Content.Duplicate
     find = rng.Find
+    
+    search_end = rng.End
 
     find.ClearFormatting()
     find.Text = busca
@@ -86,14 +94,16 @@ def _coletar_ocorrencias(doc, busca: str, match_case=False, whole_word=False):
     find.Wrap = WD_FIND_STOP
 
     while find.Execute():
+        if rng.Start >= search_end:
+            break
         ocorrencias.append((rng.Start, rng.End))
         rng.Start = rng.End
-        rng.End = doc.Content.End
+        rng.End = search_end
 
     return ocorrencias
 
 
-def _aplicar_anottazione(doc):
+def _aplicar_anottazione(doc, corpo_range=None):
     """
     - 'Anottazione' e 'Anottazioni' sempre em minúsculo e negrito
     - Se ocorrerem muito próximas (<= 30 caracteres), apenas a última fica em negrito
@@ -102,7 +112,7 @@ def _aplicar_anottazione(doc):
 
     for termo in ("Anottazione", "Anottazioni"):
         ocorrencias.extend(
-            _coletar_ocorrencias(doc, termo, match_case=False, whole_word=True)
+            _coletar_ocorrencias(doc, termo, match_case=False, whole_word=True, corpo_range=corpo_range)
         )
 
     if not ocorrencias:
@@ -144,7 +154,7 @@ def _normalizar_lista_nomes(nomes_registrado):
 
     return [str(n).strip() for n in lista if n and str(n).strip()]
 
-def _aplicar_nome_registrado(doc, nomes_registrado):
+def _aplicar_nome_registrado(doc, nomes_registrado, corpo_range=None):
     """
     Recebe:
     - string com 1 nome
@@ -160,11 +170,13 @@ def _aplicar_nome_registrado(doc, nomes_registrado):
             bold=True,
             match_case=False,
             whole_word=False,
+            corpo_range=corpo_range,
         )
 
 
-def _corrigir_maiusculas(doc):
-    for paragrafo in doc.Paragraphs:
+def _corrigir_maiusculas(doc, corpo_range=None):
+    paragraphs = corpo_range.Paragraphs if corpo_range else doc.Paragraphs
+    for paragrafo in paragraphs:
         rng = paragrafo.Range
 
         texto = rng.Text
@@ -191,10 +203,10 @@ def _corrigir_maiusculas(doc):
                     letra.Case = 2
 
 
-def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
+def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> None:
     """
-    Aplica formatações estáticas fixas no documento inteiro,
-    independentes da IA.
+    Aplica formatações estáticas fixas.
+    Se corpo_range for informado, restringe as modificações a esse trecho.
     """
     try:
         # Casos específicos: ajuste de caixa dentro da frase
@@ -205,6 +217,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
         bold=False,
         match_case=False,
         whole_word=False,
+        corpo_range=corpo_range,
         )
         _formatar_ocorrencias(
         doc,
@@ -213,6 +226,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
         bold=False,
         match_case=False,
         whole_word=False,
+        corpo_range=corpo_range,
         )
         _formatar_ocorrencias(
         doc,
@@ -221,6 +235,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
         bold=False,
         match_case=False,
         whole_word=False,
+        corpo_range=corpo_range,
         )
         _formatar_ocorrencias(
         doc,
@@ -229,6 +244,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
         bold=True,
         match_case=False,
         whole_word=False,
+        corpo_range=corpo_range,
         )
 
         # Frases que deve ficar sempre minúscula
@@ -257,6 +273,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
                 bold=False,
                 match_case=False,
                 whole_word=False,
+                corpo_range=corpo_range,
             )
 
         # Palavras que devem ficar com inicial maiúscula e sem negrito
@@ -282,6 +299,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
                 bold=False,
                 match_case=False,
                 whole_word=True,
+                corpo_range=corpo_range,
             )
 
         # Palavras que devem ficar com inicial maiúscula e em negrito
@@ -293,9 +311,10 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
                 doc,
                 termo,
                 capitalizar_primeira(termo),
-                bold=False,
+                bold=True,
                 match_case=False,
                 whole_word=True,
+                corpo_range=corpo_range,
             )
 
         # # Palavras que devem ficar minúsculas e em negrito
@@ -307,11 +326,12 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
         #         bold=True,
         #         match_case=False,
         #         whole_word=True,
+        #         corpo_range=corpo_range,
         #     )
 
-        _aplicar_anottazione(doc)
-        _aplicar_nome_registrado(doc, nomes_registrado)
-        _corrigir_maiusculas(doc)
+        _aplicar_anottazione(doc, corpo_range)
+        _aplicar_nome_registrado(doc, nomes_registrado, corpo_range)
+        _corrigir_maiusculas(doc, corpo_range)
 
     except Exception as e:
         print(f"Erro ao aplicar formatações gerais: {e}")
