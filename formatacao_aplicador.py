@@ -163,6 +163,34 @@ def _aplicar_nome_registrado(doc, nomes_registrado):
         )
 
 
+def _corrigir_maiusculas(doc):
+    for paragrafo in doc.Paragraphs:
+        rng = paragrafo.Range
+
+        texto = rng.Text
+        if not texto:
+            continue
+
+        # Primeira letra do parágrafo
+        for i, ch in enumerate(texto):
+            if ch.isalpha():
+                letra = rng.Characters(i + 1)
+                letra.Case = 2
+                break
+
+        # Letras após . ! ?
+        for i in range(len(texto) - 2):
+            if texto[i] in ".!?":
+                j = i + 1
+
+                while j < len(texto) and texto[j].isspace():
+                    j += 1
+
+                if j < len(texto) and texto[j].isalpha():
+                    letra = rng.Characters(j + 1)
+                    letra.Case = 2
+
+
 def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
     """
     Aplica formatações estáticas fixas no documento inteiro,
@@ -219,7 +247,8 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
             "nato a",
             "nata a",
             "dello",
-            "funzionario incaricato"
+            "funzionario incaricato",
+            "rettifica",
         ):
             _formatar_ocorrencias(
                 doc,
@@ -243,8 +272,8 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
             "comunicazione",
             "stato civile",
             "nihil",
-            "da certificare"
-            "atto di"
+            "da certificare",
+            "atto di",
         ):
             _formatar_ocorrencias(
                 doc,
@@ -258,7 +287,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
         # Palavras que devem ficar com inicial maiúscula e em negrito
         for termo in (
             "annotazioni",
-            "annotazione"
+            "annotazione",
         ):
             _formatar_ocorrencias(
                 doc,
@@ -269,19 +298,20 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None) -> None:
                 whole_word=True,
             )
 
-        # Palavras que devem ficar minúsculas e em negrito
-        for termo in ("rettifica",):
-            _formatar_ocorrencias(
-                doc,
-                termo,
-                termo,
-                bold=True,
-                match_case=False,
-                whole_word=True,
-            )
+        # # Palavras que devem ficar minúsculas e em negrito
+        # for termo in ("",):
+        #     _formatar_ocorrencias(
+        #         doc,
+        #         termo,
+        #         termo,
+        #         bold=True,
+        #         match_case=False,
+        #         whole_word=True,
+        #     )
 
         _aplicar_anottazione(doc)
         _aplicar_nome_registrado(doc, nomes_registrado)
+        _corrigir_maiusculas(doc)
 
     except Exception as e:
         print(f"Erro ao aplicar formatações gerais: {e}")
