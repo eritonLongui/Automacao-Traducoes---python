@@ -29,6 +29,9 @@ def identificar_tipo_pelo_nome(nome_arquivo: str) -> str:
 
     if re.match(r"^CC\b", stem):
         return "casamento"
+    
+    if re.match(r"^CO\b", stem):
+        return "obito"
 
     return "desconhecido"
 
@@ -48,6 +51,9 @@ def extrair_nomes_arquivo(nome_arquivo: str):
             nome.strip()
             for nome in re.split(r"\s+e\s+", nomes, flags=re.IGNORECASE)
         ]
+    
+    if tipo == "obito":
+        return [re.sub(r"^CO\s+", "", stem, flags=re.IGNORECASE).strip()]
 
     return []
 

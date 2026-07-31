@@ -406,7 +406,7 @@ def analisar_documento(
     if role_definitions is None:
         raise ValueError(f"Tipo de certidão inválido: {tipo_certidao}")
 
-    print("Analisando documento inteiro - rodada 1...")
+    print("Analisando documento - rodada 1...")
     resultado_1 = _analisar_rodada(
         paragrafos,
         gemini_client=gemini_client,
@@ -416,7 +416,7 @@ def analisar_documento(
         role_definitions=role_definitions,
     )
 
-    print("Analisando documento inteiro - rodada 2...")
+    print("Analisando documento - rodada 2...")
     resultado_2 = _analisar_rodada(
         paragrafos,
         gemini_client=gemini_client,

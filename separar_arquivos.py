@@ -19,7 +19,7 @@ END_PATTERN = (
     r"il\s+\d{2}/\d{2}/\d{4}\."
 )
 
-TYPE_PATTERN = r"CERTIFICATO INTEGRALE DI\s+(NASCITA|MATRIMONIO)"
+TYPE_PATTERN = r"CERTIFICATO INTEGRALE DI\s+(NASCITA|MATRIMONIO|MORTE)"
 
 NEW_DATE = datetime.now().strftime("%d/%m/%Y")
 
@@ -79,7 +79,15 @@ def get_prefix_and_name(paragraph_texts):
         return None, None
 
     tipo = tipo_match.group(1).upper()
-    prefix = "CN" if tipo == "NASCITA" else "CC"
+    
+    if tipo == "NASCITA":
+        prefix = "CN"
+    elif tipo == "MATRIMONIO":
+        prefix = "CC"
+    elif tipo == "MORTE":
+        prefix = "CO"
+    else:
+        prefix = "DOC"
 
     nome = None
 
