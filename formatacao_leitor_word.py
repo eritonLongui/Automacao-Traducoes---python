@@ -4,9 +4,10 @@ from typing import List, Dict, Any
 
 import win32com.client
 
-WORD_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+WORD_CTRL_RE = re.compile(r"[\x00-\x08\x0c\x0e-\x1f]")
 MATRICOLA_RE = re.compile(r"^\s*MATRICOLA\b", re.IGNORECASE)
-FIRMA_RE = re.compile(r"^\s*\[Firma\]\s*$", re.IGNORECASE)
+FIRMA_EXATA_RE = re.compile(r"^\s*\[Firma\]\s*$", re.IGNORECASE)
+FIRMA_MARCADOR_RE = re.compile(r"\[Firma\]", re.IGNORECASE)
 
 
 def sanitize_word_text(text: str) -> str:
@@ -14,6 +15,7 @@ def sanitize_word_text(text: str) -> str:
         return ""
     text = text.replace("\x07", "")  # end-of-cell marker / control residual
     text = text.replace("\r", "")    # paragraph mark
+    text = text.replace("\x0b", " ")   # separador entre blocos
     text = WORD_CTRL_RE.sub("", text)
     return text
 
@@ -99,9 +101,14 @@ def localizar_faixa_corpo(doc) -> Dict[str, Any]:
             matricola_idx = i
             continue
 
-        if matricola_idx is not None and FIRMA_RE.fullmatch(texto):
-            firma_idx = i
-            break
+        if matricola_idx is not None:
+            if FIRMA_EXATA_RE.fullmatch(texto):
+                firma_idx = i
+                break
+
+            elif FIRMA_MARCADOR_RE.search(texto):
+                firma_idx = i
+                break
 
     if matricola_idx is None:
         raise ValueError("Não foi encontrado o bloco que começa com 'MATRICOLA'.")
