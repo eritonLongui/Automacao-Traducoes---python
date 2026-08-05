@@ -239,9 +239,18 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
         )
         _formatar_ocorrencias(
         doc,
-        "[A tergo riprende]",
+        "[a tergo riprende]",
         "[A tergo riprende]",
         bold=True,
+        match_case=False,
+        whole_word=False,
+        corpo_range=corpo_range,
+        )
+        _formatar_ocorrencias(
+        doc,
+        "codice civile",
+        "Codice civile",
+        bold=False,
         match_case=False,
         whole_word=False,
         corpo_range=corpo_range,
@@ -302,6 +311,21 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
                 corpo_range=corpo_range,
             )
 
+        # corrigindo casos específicos alterados pela regra acima
+        for termo in (
+                    "dello sposo",
+                    "della sposa",
+                ):
+                    _formatar_ocorrencias(
+                        doc,
+                        termo,
+                        termo,
+                        bold=False,
+                        match_case=False,
+                        whole_word=False,
+                        corpo_range=corpo_range,
+                    )
+
         # Palavras que devem ficar com inicial maiúscula e em negrito
         for termo in (
             "annotazioni",
@@ -332,6 +356,16 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
         _aplicar_anottazione(doc, corpo_range)
         _aplicar_nome_registrado(doc, nomes_registrado, corpo_range)
         _corrigir_maiusculas(doc, corpo_range)
+
+        _formatar_ocorrencias(
+            doc,
+            "il contenuto del certificato è veritiero. do fede.",
+            "Il contenuto del Certificato è veritiero. Do fede.",
+            bold=False,
+            match_case=False,
+            whole_word=False,
+            corpo_range=corpo_range,
+        )
 
     except Exception as e:
         print(f"Erro ao aplicar formatações gerais: {e}")
