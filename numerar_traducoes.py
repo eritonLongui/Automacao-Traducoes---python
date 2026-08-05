@@ -368,13 +368,13 @@ def update_word_document_footer(path: Path, translation_number: str, patterns: l
         target_paragraph = footer.Paragraphs(2)
         current_text = str(target_paragraph.Range.Text)
 
-        LOGGER.info("Texto atual do rodapé alvo: %r", current_text)
+        # LOGGER.info("Texto atual do rodapé alvo: %r", current_text)
 
         target_paragraph.Range.Text = replacement_text
 
         # Confirma se a troca foi aplicada
         updated_text = str(target_paragraph.Range.Text)
-        LOGGER.info("Texto após substituição: %r", updated_text)
+        LOGGER.info("Rodapé alterado para: %r", updated_text)
 
         if replacement_text not in updated_text:
             raise DocumentError(
@@ -444,7 +444,7 @@ def process_documents(
     docs = discover_documents(base_dir)
     processed = 0
 
-    LOGGER.info("%d arquivo(s) .docx encontrado(s) em %s", len(docs), base_dir)
+    # LOGGER.info("%d arquivo(s) .docx encontrado(s) em %s", len(docs), base_dir)
 
     grouped: dict[str, list[Path]] = defaultdict(list)
     for doc_path in docs:
@@ -457,6 +457,11 @@ def process_documents(
             key=lambda p: relative_display_path(p, base_dir).casefold(),
         )
 
+        LOGGER.info("========================================")
+        LOGGER.info("família: %s", family)
+        LOGGER.info("%s documento(s) encontrado(s)", len(family_docs))
+        LOGGER.info("========================================")
+
         for doc_path in family_docs:
             rel_path = relative_display_path(doc_path, base_dir)
             document_name = extract_document_name(doc_path)
@@ -464,7 +469,7 @@ def process_documents(
 
             if index.document_exists(family, document_name, registration_date) is not None:
                 LOGGER.info(
-                    "Pulando já registrado (família + documento + data iguais): %s | família=%s | data=%s",
+                    "Pulando já registrado: %s | família = %s | data = %s",
                     rel_path,
                     family,
                     registration_date.strftime("%d/%m/%Y"),
@@ -482,14 +487,9 @@ def process_documents(
 
             target_row = index.first_available_row()
 
-            LOGGER.info(
-                "Preparando registro: linha=%s | família=%s | documento=%s | folha=%s | tradução=%s",
-                target_row,
-                family,
-                document_name,
-                folha_number,
-                translation_number,
-            )
+            LOGGER.info("")
+            LOGGER.info("Preparando: %s", document_name)
+            LOGGER.info("Registro concluído: linha = %s | tradução nº = %s", target_row, translation_number)
 
             if dry_run:
                 LOGGER.info("[dry-run] Não gravei a planilha nem alterei o documento: %s", rel_path)
@@ -514,7 +514,7 @@ def process_documents(
                     raise DocumentError(
                         "Nenhum padrão de tradução foi encontrado no rodapé. Verifique o texto do modelo."
                     )
-                LOGGER.info("Atualizei %s com %d substituição(ões) no rodapé.", rel_path, changed)
+                # LOGGER.info("Atualizei %s com %d substituição(ões) no rodapé.", rel_path, changed)
             except Exception as exc:
                 LOGGER.error(
                     "Falha ao editar o documento %s. Planilha alterada: %s. Motivo: %s",
@@ -553,8 +553,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     logging.basicConfig(
-        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(message)s",
+        level=logging.INFO,
+        format="%(message)s"
     )
 
     base_dir = Path(args.base_dir).resolve()
@@ -587,7 +587,14 @@ def main(argv: list[str] | None = None) -> int:
         LOGGER.exception("Execução interrompida por falha inesperada.")
         return 1
 
-    LOGGER.info("Concluído. %d arquivo(s) processado(s).", processed)
+    LOGGER.info("")
+    LOGGER.info("")
+    LOGGER.info("========================================")
+    LOGGER.info("Numerações concluídas")
+    LOGGER.info("%d arquivo(s) processado(s).", processed)
+    LOGGER.info("========================================")
+    LOGGER.info("")
+
     return 0
 
 
