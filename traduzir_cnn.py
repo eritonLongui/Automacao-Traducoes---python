@@ -237,6 +237,15 @@ def process_pdf(pdf_path: Path) -> None:
         print(f"Erro em {pdf_path.name}: {e}")
 
 
+def limpar_entrada():
+    for item in INPUT_DIR.iterdir():
+        if item.name == ".gitkeep":
+            continue
+        if item.is_dir():
+            shutil.rmtree(item)
+        else:
+            item.unlink()
+
 def main():
 
     if not MODEL_PATH.exists():
@@ -249,6 +258,8 @@ def main():
 
     for pdf in pdfs:
         process_pdf(pdf)
+
+    limpar_entrada()
 
 if __name__ == "__main__":
     main()

@@ -30,6 +30,28 @@ if errorlevel 1 (
 
 echo.
 echo ======================================
-echo Fluxo concluido com sucesso!
+echo Limpando a pasta de entrada...
+echo ======================================
+for /d %%p in ("entrada\*") do rmdir /s /q "%%p"
+for %%f in ("entrada\*") do (
+    if /i not "%%~nxf"==".gitkeep" del /q "%%f"
+)
+
+echo.
+echo ======================================
+echo Executando numerar_traducoes.py...
+echo ======================================
+python numerar_traducoes.py
+
+if errorlevel 1 (
+    echo.
+    echo Ocorreu um erro ao executar numerar_traducoes.py.
+    pause
+    exit /b 1
+)
+
+echo.
+echo ======================================
+echo Fluxo completo concluido com sucesso!
 echo ======================================
 pause

@@ -133,8 +133,8 @@ class GSpreadSheetClient(BaseSheetClient):
         end_column = chr(ord(start_column.upper()) + len(values) - 1)
         self.ensure_row_exists(row_number)
         self._worksheet.update(
-            f"{start_column.upper()}{row_number}:{end_column}{row_number}",
-            [values],
+            range_name=f"{start_column.upper()}{row_number}:{end_column}{row_number}",
+            values=[values],
             value_input_option="RAW",
         )
 
@@ -457,10 +457,8 @@ def process_documents(
             key=lambda p: relative_display_path(p, base_dir).casefold(),
         )
 
-        LOGGER.info("========================================")
         LOGGER.info("família: %s", family)
         LOGGER.info("%s documento(s) encontrado(s)", len(family_docs))
-        LOGGER.info("========================================")
 
         for doc_path in family_docs:
             rel_path = relative_display_path(doc_path, base_dir)
@@ -469,9 +467,8 @@ def process_documents(
 
             if index.document_exists(family, document_name, registration_date) is not None:
                 LOGGER.info(
-                    "Pulando já registrado: %s | família = %s | data = %s",
-                    rel_path,
-                    family,
+                    "Pulando já registrado: %s | data = %s",
+                    document_name,
                     registration_date.strftime("%d/%m/%Y"),
                 )
                 continue
@@ -488,7 +485,7 @@ def process_documents(
             target_row = index.first_available_row()
 
             LOGGER.info("")
-            LOGGER.info("Preparando: %s", document_name)
+            LOGGER.info("==== %s ====", document_name)
             LOGGER.info("Registro concluído: linha = %s | tradução nº = %s", target_row, translation_number)
 
             if dry_run:
@@ -589,10 +586,8 @@ def main(argv: list[str] | None = None) -> int:
 
     LOGGER.info("")
     LOGGER.info("")
-    LOGGER.info("========================================")
     LOGGER.info("Numerações concluídas")
     LOGGER.info("%d arquivo(s) processado(s).", processed)
-    LOGGER.info("========================================")
     LOGGER.info("")
 
     return 0

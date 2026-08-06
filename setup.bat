@@ -34,13 +34,28 @@ if not exist __pycache__ mkdir __pycache__
 if not exist entrada\.gitkeep type nul > entrada\.gitkeep
 if not exist saida\.gitkeep type nul > saida\.gitkeep
 
-:: Oculta os arquivos
-attrib +h entrada\.gitkeep
-attrib +h saida\.gitkeep
+:: Oculta pastas internas/de desenvolvimento
+if exist __pycache__ attrib +h __pycache__
+if exist modelos attrib +h modelos
+if exist .git attrib +h .git
 
-:: Oculta as pastas 
-attrib +h __pycache__
-attrib +h modelos
+:: Garante visibilidade das pastas de uso principal
+if exist entrada attrib -h entrada
+if exist divididos attrib -h divididos
+if exist saida attrib -h saida
+
+:: Oculta arquivos .gitkeep especificos
+if exist entrada\.gitkeep attrib +h entrada\.gitkeep
+if exist saida\.gitkeep attrib +h saida\.gitkeep
+
+:: Oculta todos os arquivos no diretorio raiz que NAO sao .bat
+for %%f in (*.*) do (
+    if /i not "%%~xf"==".bat" (
+        attrib +h "%%f"
+    ) else (
+        attrib -h "%%f"
+    )
+)
 
 echo.
 echo ===================================
