@@ -15,12 +15,13 @@ Scripts em Python para facilitar e automatizar fluxos de trabalho com certidões
 ```text
 .
 ├── entrada/
+├── divididos/
 ├── saida/
-├── modelos/
 ├── executar fluxo completo.bat
-├── executar numerar_certidoes.bat
-├── executar separar_arquivos.bat
 ├── executar traduzir_cnn.bat
+├── executar separar_arquivos.bat
+├── executar formatar_certidoes.bat
+├── executar numerar_certidoes.bat
 ├── setup.bat
 ├── formatacao_*.py
 ├── formatar_certidoes.py
@@ -42,7 +43,6 @@ Scripts em Python para facilitar e automatizar fluxos de trabalho com certidões
 2. Certifique-se de ter instalado o **Python na versão 3.14.6**.
 3. Crie ou renomeie o arquivo `.env.example` para `.env` na raiz do projeto e preencha com as suas chaves de API:
    ```
-   GROQ_API_KEY=sua_chave_aqui
    GEMINI_API_KEY=sua_chave_aqui
    ```
 4. Adicione o arquivo de credenciais de APIs (ex: `numero-traducao-82a46e53b009.json`) na mesma pasta dos scripts para que o código funcione corretamente.
@@ -51,22 +51,23 @@ Scripts em Python para facilitar e automatizar fluxos de trabalho com certidões
 
 ### 1. Separar Arquivos (`executar separar_arquivos.bat`)
 Separa automaticamente múltiplas certidões contidas em um único arquivo `.doc` do Microsoft Word, gerando um arquivo `.docx` para cada certidão encontrada.
-* **Como utilizar:** Coloque o(s) arquivo(s) `.doc` na pasta `entrada` e execute o `.bat`. Os arquivos gerados serão salvos em subpastas dentro de `saida`.
+* **Como utilizar:** Coloque o(s) arquivo(s) `.doc` na pasta `entrada` e execute o `.bat`. Os arquivos gerados serão salvos em subpastas dentro de `divididos`.
 
 ### 2. Formatar Certidões (`formatar_certidoes.py`)
-Aplica formatações automatizadas através das bibliotecas e modelos de formatação em certidões processadas, interagindo com o Microsoft Word via `pywin32`.
+Aplica formatações automatizadas através de revisão com IA e regras de formatação em certidões processadas, interagindo com o Microsoft Word via `pywin32`.
 
 ### 3. Numerar Certidões (`executar numerar_certidoes.bat`)
-Fluxo acionado pelo `numerar_traducoes.py` que organiza e aplica uma numeração padrão para as certidões e traduções trabalhadas.
+Fluxo acionado pelo `numerar_traducoes.py` que organiza e aplica uma numeração padrão para as certidões e traduções trabalhadas presentes na pasta `saida`.
 
 ### 4. Traduzir CNN (`executar traduzir_cnn.bat`)
-Executa o fluxo do `traduzir_cnn.py` para auxiliar com as traduções usando APIs externas.
+Executa o fluxo do `traduzir_cnn.py` para traduzir PDFs inclusos na pasta `entrada` e retornando com um arquivo `.docx` na pasta `saida`.
 
 ### 5. Fluxo Completo (`executar fluxo completo.bat`)
-Executa de forma automatizada e sequencial a separação de arquivos e a formatação das certidões.
+Executa de forma automatizada e sequencial a separação de arquivos, a formatação das certidões e a numeração de certidões.
+Caso a CNN traduzida já esteja presente na pasta `saida`, o fluxo também irá alterar o numero de tradução desse arquivo.
 
 ## Observações
 
-* O projeto utiliza automação do Microsoft Word através da biblioteca `pywin32`.
-* O Microsoft Word deve estar devidamente instalado e licenciado na máquina.
 * Apenas arquivos `.doc` ou cnn `.pdf` presentes na pasta `entrada` serão processados.
+* Para o fluxo funcionar corretamente, caso as certidões sejam inseridas diretamente na pasta `divididos`, elas devem seguir o padrão de nomenclatura: `pasta:` "nome da família" / `arquivos:` "CN + NOME DO REGISTRADO" (para nascimentos); e "CN + NOME DO REGISTRADO + e + NOME DO CONJUGE".
+* O fluxo `numerar_traducoes.py` registra as certidões na planilha correspondente, e quanto executado, verifica se a planilha possui ocorrências dos mesmos `nome da família` e `nome do arquivo` na data atual, para verificar duplicidades, registros em outras datas não contam como duplicidade.

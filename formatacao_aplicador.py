@@ -274,6 +274,12 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "dello",
             "funzionario incaricato",
             "rettifica",
+            "consta nella colonna centrale",
+            "consta nella colonna di sinistra",
+            "consta nella colonna di destra",
+            "stesso nome",
+            "registro di ",
+            "comunione parziale dei beni",
         ):
             _formatar_ocorrencias(
                 doc,
@@ -300,6 +306,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "nihil",
             "da certificare",
             "atto di",
+            "detran",
         ):
             _formatar_ocorrencias(
                 doc,
