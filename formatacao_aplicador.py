@@ -280,6 +280,18 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "stesso nome",
             "registro di ",
             "comunione parziale dei beni",
+            "comunione universale dei beni",
+            "data della registrazione",
+            "lui",
+            "lei",
+            "della registrata",
+            "il dichiarante",
+            "carimbo",
+            "timbro",
+            "registro delle nascite",
+            "nient'altro",
+            "repubblica federale del brasile",
+            "alla",
         ):
             _formatar_ocorrencias(
                 doc,
@@ -307,6 +319,16 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "da certificare",
             "atto di",
             "detran",
+            "libro",
+            "pagina",
+            "padre",
+            "madre",
+            "nonni",
+            "deceduto",
+            "averbazione",
+            "anotazioni"
+            "brasiliano",
+            "brasiliana",
         ):
             _formatar_ocorrencias(
                 doc,
@@ -333,32 +355,35 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
                         corpo_range=corpo_range,
                     )
 
-        # Palavras que devem ficar com inicial maiúscula e em negrito
-        for termo in (
-            "annotazioni",
-            "annotazione",
-        ):
-            _formatar_ocorrencias(
-                doc,
-                termo,
-                capitalizar_primeira(termo),
-                bold=True,
-                match_case=False,
-                whole_word=True,
-                corpo_range=corpo_range,
-            )
-
-        # # Palavras que devem ficar minúsculas e em negrito
+        # # Palavras que devem ficar com inicial maiúscula e em negrito
         # for termo in ("",):
         #     _formatar_ocorrencias(
         #         doc,
         #         termo,
-        #         termo,
+        #         capitalizar_primeira(termo),
         #         bold=True,
         #         match_case=False,
         #         whole_word=True,
         #         corpo_range=corpo_range,
         #     )
+
+        # Palavras que devem ficar minúsculas e em negrito
+        for termo in (
+            "annotazioni",
+            "annotazione",
+            "osservazioni",
+            "si è sposata",
+            "si è sposato",
+        ):
+            _formatar_ocorrencias(
+                doc,
+                termo,
+                termo,
+                bold=True,
+                match_case=False,
+                whole_word=True,
+                corpo_range=corpo_range,
+            )
 
         _aplicar_anottazione(doc, corpo_range)
         _aplicar_nome_registrado(doc, nomes_registrado, corpo_range)

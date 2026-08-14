@@ -6,9 +6,9 @@ SAIDA_DIR = BASE_DIR / "saida"
 
 DEBUG_DIR = ENTRADA_DIR / "debug_ia"
 
-GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite-preview"
-GEMINI_FLASH_MODEL = "gemini-2.5-flash"
-GEMINI_3_FLASH_MODEL = "gemini-3-flash"
+GEMINI_FLASH_LITE_MODEL = "gemini-3.5-flash-lite"
+GEMINI_FLASH_MODEL = "gemini-3.6-flash"
+GEMINI_3_FLASH_MODEL = "gemini-3.1-flash-lite"
 GEMINI_TEMPERATURE = 0
 
 # Regras de formatação de traduções
