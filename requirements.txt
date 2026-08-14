@@ -1,6 +1,9 @@
-groq
 google-genai
 pywin32
 python-dotenv
 pymupdf
 gspread
+opencv-python
+paddlepaddle
+paddleocr
+numpy
