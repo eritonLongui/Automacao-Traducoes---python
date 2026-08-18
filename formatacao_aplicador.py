@@ -292,6 +292,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "nient'altro",
             "repubblica federale del brasile",
             "alla",
+            "divorzio"
         ):
             _formatar_ocorrencias(
                 doc,

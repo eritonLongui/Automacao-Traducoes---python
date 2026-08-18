@@ -33,6 +33,9 @@ ROLE_STYLES = {
     "marriage_place": {"bold": True, "uppercase": False},
     "death_place": {"bold": True, "uppercase": False},
 
+    "marriage_registration_date": {"bold": True, "uppercase": False},
+    "marriage_registration_place": {"bold": True, "uppercase": False},
+
     "annotation_title": {"bold": True, "uppercase": False},
     "annotation_subject": {"bold": True, "uppercase": False},
     "rectification_title": {"bold": True, "uppercase": False},
@@ -54,7 +57,6 @@ ROLE_DEFINITIONS_GERAIS = {
     "grandparent_name": "Nome de avô/avó.",
     "birth_date": "Data de nascimento.",
     "marriage_date": "Data de casamento.",
-    "registration_date": "Data de registro / lavratura / transcrição.",
     "death_date": "Data de óbito.",
     "birth_place": "Cidade de nascimento.",
     "marriage_place": "Cidade do casamento.",
@@ -71,13 +73,16 @@ ROLE_DEFINITIONS_GERAIS = {
 
 ROLE_DEFINITIONS_NASCIMENTO = {
     "declarant": "Nome do declarante do nascimento.",
-    "registration_place": "Local onde foi registrado / lavrado / transcrito."
+    "birth_registration_date": "Data de registro / lavratura / transcrição do nascimento.",
+    "birth_registration_place": "Local onde foi registrado / lavrado / transcrito o nascimento.",
 }
 
 ROLE_DEFINITIONS_CASAMENTO = {
     "father_in_law": "Nome do pai do cônjuge.",
     "mother_in_law": "Nome da mãe do cônjuge.",
-    "grandparent_spouse_name": "Nome de avô/avó do cônjuge."
+    "grandparent_spouse_name": "Nome de avô/avó do cônjuge.",
+    "marriage_registration_date": "Data de registro / lavratura / transcrição do casamento.",
+    "marriage_registration_place": "Local onde foi registrado / lavrado / transcrito o casamento.",
 }
 
 ROLE_DEFINITIONS_POR_TIPO = {
@@ -100,6 +105,8 @@ ROLE_ALTERACAO_PRIMEIRA_OCORRENCIA = {
     "birth_place",
     "marriage_place",
     "death_place",
+    "marriage_registration_date",
+    "marriage_registration_place",
 }
 
 SYSTEM_PROMPT = """
@@ -123,12 +130,15 @@ Formato:
     ]
 }}
 
-Retorne cada trecho literal apenas uma vez por parágrafo.
-Se o mesmo texto aparecer várias vezes no parágrafo, retorne apenas uma ocorrência.
-Não converta datas por extenso em datas numéricas.
-Não reescreva nomes.
-Não atribua mais de uma role ao mesmo texto literal.
-O texto deve ser copiado exatamente como aparece no parágrafo.
+Regras de Extração e Limites de Texto (MUITO IMPORTANTE):
+1. O texto deve ser copiado exatamente como aparece no parágrafo.
+2. LOCAIS (birth_place, marriage_place, death_place, marriage_registration_place): Extraia APENAS o nome do município ou cidade (exemplo: "Roma", "Verona", "Milano"). NUNCA inclua preposições ou artigos como "a", "in", "nel comune di", "comune di", "città di".
+3. DATAS (birth_date, marriage_date, death_date, marriage_registration_date): Extraia APENAS o texto da data em si (exemplo: "10/05/1980" ou "dieci maggio millenovecentottanta"). NUNCA inclua conectivos ou artigos como "il", "ai", "aos", "em".
+4. DISTINÇÃO DE EVENTOS: Identifique com precisão as datas e locais pertencentes ao registrado (nascimento, casamento, óbito, ou registro do casamento). Se o parágrafo contiver a data ou local de nascimento, casamento, óbito ou registro do casamento, a extração dessas roles é OBRIGATÓRIA. Não confunda com dados de terceiros.
+5. Retorne cada trecho literal apenas uma vez por parágrafo.
+6. Não converta datas por extenso em datas numéricas.
+7. Não reescreva nomes.
+8. Não atribua mais de uma role ao mesmo texto literal.
 
 Roles disponíveis:
 {roles}
