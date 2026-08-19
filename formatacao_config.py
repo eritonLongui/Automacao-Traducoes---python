@@ -24,6 +24,7 @@ ROLE_STYLES = {
     "father_in_law": {"bold": False, "uppercase": True},
     "mother_in_law": {"bold": False, "uppercase": True},
     "grandparent_spouse_name": {"bold": False, "uppercase": True},
+    "parent_declarant": {"bold": False, "uppercase": True},
 
     "birth_date": {"bold": True, "uppercase": False},
     "marriage_date": {"bold": True, "uppercase": False},
@@ -72,7 +73,8 @@ ROLE_DEFINITIONS_GERAIS = {
 }
 
 ROLE_DEFINITIONS_NASCIMENTO = {
-    "declarant": "Nome do declarante do nascimento.",
+    "declarant": "Nome do declarante do nascimento, se não for o pai ou mãe.",
+    "parent_declarant": "Nome do declarante do nascimento, se for o pai ou mãe.",
     "birth_registration_date": "Data de registro / lavratura / transcrição do nascimento.",
     "birth_registration_place": "Local onde foi registrado / lavrado / transcrito o nascimento.",
 }
