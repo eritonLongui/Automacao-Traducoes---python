@@ -21,6 +21,14 @@ from formatacao_aplicador import (
 )
 
 
+def deve_ignorar_formatacao(nome_arquivo: str) -> bool:
+    stem = Path(nome_arquivo).stem.upper().strip()
+    return bool(
+        re.match(r"^(PR|CNN)([\s_\-\.\d]|\b|$)", stem, flags=re.IGNORECASE)
+        or stem.startswith("CNN")
+    )
+
+
 def identificar_tipo_pelo_nome(nome_arquivo: str) -> str:
     stem = Path(nome_arquivo).stem.upper().strip()
 
@@ -134,6 +142,13 @@ def processar_arquivo(
         out_path.unlink()
     if out_fallback.exists():
         out_fallback.unlink()
+
+    if deve_ignorar_formatacao(arquivo.name):
+        print(f"\n========== {arquivo.name} ==========")
+        print(f"Prefixo PR/CNN detectado: copiando sem formatação para {out_path.name}")
+        shutil.copy2(arquivo, out_path)
+        print(f"OK: {out_path.name}")
+        return
 
     doc = None
 
