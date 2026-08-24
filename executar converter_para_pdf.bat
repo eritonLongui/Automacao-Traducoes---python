@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 > nul
 title Converter para PDF
 
 cd /d "%~dp0"
@@ -12,3 +13,4 @@ if errorlevel 1 (
 
 echo.
 pause
+

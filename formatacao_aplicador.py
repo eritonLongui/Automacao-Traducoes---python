@@ -345,6 +345,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
         for termo in (
                     "dello sposo",
                     "della sposa",
+                    "fatto",
                 ):
                     _formatar_ocorrencias(
                         doc,
