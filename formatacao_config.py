@@ -87,6 +87,12 @@ ROLE_DEFINITIONS_CASAMENTO = {
     "marriage_registration_place": "Local onde foi registrado / lavrado / transcrito o casamento.",
 }
 
+ROLE_DEFINITIONS_TODAS = {
+    **ROLE_DEFINITIONS_GERAIS,
+    **ROLE_DEFINITIONS_NASCIMENTO,
+    **ROLE_DEFINITIONS_CASAMENTO,
+}
+
 ROLE_DEFINITIONS_POR_TIPO = {
     "nascimento": {
         **ROLE_DEFINITIONS_GERAIS,

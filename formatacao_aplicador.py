@@ -518,22 +518,13 @@ def normalizar_caixa_paragrafos(doc, paragraph_ids: List[int]) -> None:
 
 def uppercase_range(word_range) -> None:
     """
-    Converte o conteúdo do range para maiúsculas preservando a estrutura do trecho.
-    Fazemos char a char para minimizar risco de alterar formatação ao redor.
+    Converte o conteúdo do range para maiúsculas preservando a estrutura e os limites do trecho.
+    Usa o comando nativo do Word COM (wdUpperCase = 1).
     """
-    chars = word_range.Characters
-    count = chars.Count
-
-    for i in range(count, 0, -1):
-        ch = chars(i)
-        txt = ch.Text
-
-        if txt in ("\r", "\x07"):
-            continue
-
-        upper = txt.upper()
-        if upper != txt:
-            ch.Text = upper
+    try:
+        word_range.Case = 1  # 1 = wdUpperCase
+    except Exception:
+        pass
 
 
 def aplicar_segmento(doc, segmento: Dict[str, Any]) -> None:

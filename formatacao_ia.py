@@ -16,6 +16,7 @@ from formatacao_config import (
     GEMINI_TEMPERATURE,
     SYSTEM_PROMPT,
     ROLE_DEFINITIONS_POR_TIPO,
+    ROLE_DEFINITIONS_TODAS,
     ROLE_ALTERACAO_PRIMEIRA_OCORRENCIA,
 )
 from formatacao_leitor_word import normalizar_texto_para_analise
@@ -367,7 +368,7 @@ def _analisar_rodada(
 
         try:
             resultado = extrair_json_da_resposta(content)
-            resultado = validar_resposta(resultado, paragrafos_prompt, role_definitions)
+            resultado = validar_resposta(resultado, paragrafos_prompt, ROLE_DEFINITIONS_TODAS)
             resultado = deduplicar_segmentos(resultado)
             return resultado
         except Exception as e:
