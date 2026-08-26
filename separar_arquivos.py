@@ -92,20 +92,25 @@ def get_prefix_and_name(paragraph_texts):
     nome = None
 
     for i, txt in enumerate(paragraph_texts):
-        if re.fullmatch(r"\s*NOME\s*", txt, flags=re.IGNORECASE):
-            for nxt in paragraph_texts[i + 1:]:
-                nxt = nxt.strip()
-                if nxt:
-                    nome = nxt
-                    break
-            break
+        clean_p = txt.strip()
+        if not clean_p:
+            continue
 
-    if not nome:
-        for txt in paragraph_texts:
-            m = re.match(r"^\s*NOME\b\s*[:\-]?\s*(.+)$", txt, flags=re.IGNORECASE)
-            if m:
-                nome = m.group(1).strip()
+        # Caso 1: Parágrafo contém apenas 'NOME' (ou 'NOME:', 'NOME -')
+        if re.match(r"^NOME\s*[:\-]?$", clean_p, flags=re.IGNORECASE):
+            for nxt in paragraph_texts[i + 1:]:
+                nxt_clean = nxt.strip()
+                if nxt_clean:
+                    nome = nxt_clean
+                    break
+            if nome:
                 break
+
+        # Caso 2: Parágrafo começa com 'NOME' seguido do próprio nome (ex: "NOME: JOÃO DA SILVA")
+        m = re.match(r"^NOME\b\s*[:\-]?\s*(.+)$", clean_p, flags=re.IGNORECASE)
+        if m:
+            nome = m.group(1).strip()
+            break
 
     if nome:
         nome = re.sub(r"\s+", " ", nome).strip()

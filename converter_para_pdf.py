@@ -5,7 +5,7 @@ Fluxo:
 - Varre a pasta ./saida (subpastas ou raiz);
 - Para cada arquivo .docx, gera o arquivo .pdf correspondente em <pasta>_convertidos;
 - Se todos os arquivos da pasta forem convertidos com sucesso (sem erros),
-  a pasta original (.docx) é apagada e a pasta <pasta>_convertidos é renomeada para <pasta>.
+  a pasta original (.docx) recebe o sufixo _traduzidas (não é excluída) e a pasta <pasta>_convertidos é renomeada para <pasta>.
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ def renomear_pasta_com_retry(origem: Path, destino: Path, retries: int = 5, dela
 def discover_documents(base_dir: Path) -> list[Path]:
     """
     Descobre todos os documentos .docx na pasta 'saida',
-    ignorando arquivos temporários e pastas com sufixo `_convertidos`.
+    ignorando arquivos temporários e pastas com sufixo `_convertidos` ou `_traduzidas`.
     """
     if not base_dir.exists():
         LOGGER.warning("A pasta '%s' não existe.", base_dir)
@@ -86,7 +86,7 @@ def discover_documents(base_dir: Path) -> list[Path]:
             continue
         if path.name.startswith("~$"):
             continue
-        if any(part.endswith("_convertidos") for part in path.parts):
+        if any(part.endswith("_convertidos") or part.endswith("_traduzidas") for part in path.parts):
             continue
         if path.suffix.lower() in SUPPORTED_EXTENSIONS:
             docs.append(path)
@@ -209,12 +209,15 @@ def main() -> None:
         if stats["total"] > 0 and stats["erros"] == 0 and stats["sucessos"] == stats["total"]:
             orig = stats["caminho_orig"]
             dest = stats["caminho_dest"]
+            pasta_traduzidas = BASE_DIR / f"{pasta_nome}_traduzidas"
             if orig is not None and dest is not None and dest.exists():
                 try:
-                    remover_pasta_com_retry(orig)
+                    if pasta_traduzidas.exists():
+                        remover_pasta_com_retry(pasta_traduzidas)
+                    renomear_pasta_com_retry(orig, pasta_traduzidas)
                     renomear_pasta_com_retry(dest, orig)
                 except Exception as e:
-                    LOGGER.error("Erro ao substituir a pasta original '%s': %s", pasta_nome, e)
+                    LOGGER.error("Erro ao reorganizar pastas para '%s': %s", pasta_nome, e)
         elif stats["erros"] > 0:
             LOGGER.warning(
                 "A pasta original '%s' foi mantida devido a erros na conversão (%d erro(s)).",
