@@ -43,6 +43,7 @@ BASE_DIR_DEFAULT = "./saida"
 DEFAULT_FOOTER_PLACEHOLDERS = [r"Tradução"]
 TRANSLATION_SUFFIX = "C"
 SUPPORTED_EXTENSIONS = {".docx"}
+DOC_EXTENSIONS = {".doc"}
 
 PROJECT_DIR = Path(__file__).resolve().parent
 
@@ -166,7 +167,72 @@ def relative_display_path(path: Path, base_dir: Path) -> str:
         return path.name
 
 
+def convert_doc_to_docx(base_dir: Path) -> None:
+    """
+    Converte arquivos .doc encontrados na pasta base (e subpastas) para .docx usando o Word via win32com,
+    mantendo formatação e estrutura exatas (formato wdFormatXMLDocument = 16), e remove o .doc original.
+    """
+    doc_files: list[Path] = []
+    for path in base_dir.rglob("*"):
+        if not path.is_file() or path.name.startswith("~$"):
+            continue
+        if path.suffix.lower() in DOC_EXTENSIONS:
+            doc_files.append(path)
+
+    if not doc_files:
+        return
+
+    if win32com is None:
+        raise DocumentError(
+            f"Arquivos .doc encontrados para conversão, mas pywin32 / win32com não está disponível: {_win32_import_error}"
+        )
+
+    LOGGER.info("Convertendo %d arquivo(s) .doc para .docx...", len(doc_files))
+
+    word = None
+    try:
+        word = win32com.DispatchEx("Word.Application")
+        word.Visible = False
+        word.DisplayAlerts = 0
+
+        for doc_path in doc_files:
+            docx_path = doc_path.with_suffix(".docx")
+            rel_display = relative_display_path(doc_path, base_dir)
+            LOGGER.info("Convertendo .doc para .docx: %s", rel_display)
+
+            doc = None
+            try:
+                doc = word.Documents.Open(
+                    str(doc_path.resolve()),
+                    ReadOnly=False,
+                    AddToRecentFiles=False,
+                    ConfirmConversions=False,
+                )
+                # wdFormatXMLDocument = 16 (formato .docx padrão)
+                doc.SaveAs2(str(docx_path.resolve()), FileFormat=16)
+            finally:
+                if doc is not None:
+                    try:
+                        doc.Close(False)
+                    except Exception:
+                        pass
+
+            # Após converter com sucesso para .docx, remove o arquivo .doc antigo
+            try:
+                doc_path.unlink()
+            except Exception as exc:
+                LOGGER.warning("Não foi possível excluir o arquivo .doc original (%s): %s", rel_display, exc)
+
+    finally:
+        if word is not None:
+            try:
+                word.Quit()
+            except Exception:
+                pass
+
+
 def discover_documents(base_dir: Path) -> list[Path]:
+    convert_doc_to_docx(base_dir)
     docs: list[Path] = []
     for path in base_dir.rglob("*"):
         if not path.is_file():

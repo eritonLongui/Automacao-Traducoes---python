@@ -292,7 +292,9 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "nient'altro",
             "repubblica federale del brasile",
             "alla",
-            "divorzio"
+            "divorzio",
+            "atti di",
+            "suplente",
         ):
             _formatar_ocorrencias(
                 doc,
@@ -327,7 +329,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "nonni",
             "deceduto",
             "averbazione",
-            "anotazioni"
+            "anotazioni",
             "brasiliano",
             "brasiliana",
         ):
