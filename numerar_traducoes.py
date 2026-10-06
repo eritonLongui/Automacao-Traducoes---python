@@ -19,6 +19,7 @@ import os
 import re
 import sys
 import unicodedata
+import time
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
@@ -169,25 +170,33 @@ def relative_display_path(path: Path, base_dir: Path) -> str:
 
 def convert_doc_to_docx(base_dir: Path) -> None:
     """
-    Converte arquivos .doc encontrados na pasta base (e subpastas) para .docx usando o Word via win32com,
-    mantendo formatação e estrutura exatas (formato wdFormatXMLDocument = 16), e remove o .doc original.
+    Fase 1: Converte arquivos .doc para .docx pasta a pasta.
+    Identifica cada diretório contendo arquivos .doc, converte mantendo a formatação
+    (formato wdFormatXMLDocument = 16), valida a criação do .docx e remove o .doc original.
+    Ao final, fecha completamente a instância do Word antes de seguir para a próxima fase.
     """
-    doc_files: list[Path] = []
+    if win32com is None:
+        raise DocumentError(
+            f"pywin32 / win32com não está disponível: {_win32_import_error}"
+        )
+
+    # Agrupa arquivos .doc por pasta
+    docs_by_folder: dict[Path, list[Path]] = defaultdict(list)
     for path in base_dir.rglob("*"):
         if not path.is_file() or path.name.startswith("~$"):
             continue
         if path.suffix.lower() in DOC_EXTENSIONS:
-            doc_files.append(path)
+            docs_by_folder[path.parent].append(path)
 
-    if not doc_files:
+    if not docs_by_folder:
         return
 
-    if win32com is None:
-        raise DocumentError(
-            f"Arquivos .doc encontrados para conversão, mas pywin32 / win32com não está disponível: {_win32_import_error}"
-        )
-
-    LOGGER.info("Convertendo %d arquivo(s) .doc para .docx...", len(doc_files))
+    total_docs = sum(len(files) for files in docs_by_folder.values())
+    LOGGER.info(
+        "Fase 1: Detectados %d arquivo(s) .doc em %d pasta(s) para conversão.",
+        total_docs,
+        len(docs_by_folder),
+    )
 
     word = None
     try:
@@ -195,33 +204,63 @@ def convert_doc_to_docx(base_dir: Path) -> None:
         word.Visible = False
         word.DisplayAlerts = 0
 
-        for doc_path in doc_files:
-            docx_path = doc_path.with_suffix(".docx")
-            rel_display = relative_display_path(doc_path, base_dir)
-            LOGGER.info("Convertendo .doc para .docx: %s", rel_display)
+        # Itera pasta a pasta em ordem previsível
+        for folder in sorted(docs_by_folder.keys()):
+            folder_docs = sorted(docs_by_folder[folder])
+            folder_display = relative_display_path(folder, base_dir)
+            LOGGER.info(
+                "Convertendo pasta '%s' (%d arquivo(s) .doc)...",
+                folder_display,
+                len(folder_docs),
+            )
 
-            doc = None
-            try:
-                doc = word.Documents.Open(
-                    str(doc_path.resolve()),
-                    ReadOnly=False,
-                    AddToRecentFiles=False,
-                    ConfirmConversions=False,
-                )
-                # wdFormatXMLDocument = 16 (formato .docx padrão)
-                doc.SaveAs2(str(docx_path.resolve()), FileFormat=16)
-            finally:
-                if doc is not None:
+            for doc_path in folder_docs:
+                docx_path = doc_path.with_suffix(".docx")
+                rel_display = relative_display_path(doc_path, base_dir)
+                LOGGER.info("  Convertendo: %s", rel_display)
+
+                doc = None
+                try:
+                    doc = word.Documents.Open(
+                        str(doc_path.resolve()),
+                        ReadOnly=False,
+                        AddToRecentFiles=False,
+                        ConfirmConversions=False,
+                    )
+                    # wdFormatXMLDocument = 16 (formato .docx padrão)
+                    doc.SaveAs2(str(docx_path.resolve()), FileFormat=16)
+                except Exception as exc:
+                    raise DocumentError(
+                        f"Falha ao converter '{rel_display}' para .docx: {exc}"
+                    ) from exc
+                finally:
+                    if doc is not None:
+                        try:
+                            doc.Close(False)
+                        except Exception:
+                            pass
+
+                # Valida se o .docx foi realmente criado e não está vazio
+                if not docx_path.exists() or docx_path.stat().st_size == 0:
+                    raise DocumentError(
+                        f"Arquivo .docx resultante não foi gerado ou está vazio: {docx_path.name}"
+                    )
+
+                # Remove o arquivo .doc original com retry caso o Windows mantenha lock breve
+                removed = False
+                for _ in range(5):
                     try:
-                        doc.Close(False)
+                        doc_path.unlink()
+                        removed = True
+                        break
                     except Exception:
-                        pass
+                        time.sleep(0.2)
 
-            # Após converter com sucesso para .docx, remove o arquivo .doc antigo
-            try:
-                doc_path.unlink()
-            except Exception as exc:
-                LOGGER.warning("Não foi possível excluir o arquivo .doc original (%s): %s", rel_display, exc)
+                if not removed:
+                    LOGGER.warning(
+                        "Não foi possível excluir o arquivo .doc original (%s). Verifique bloqueios.",
+                        rel_display,
+                    )
 
     finally:
         if word is not None:
@@ -230,9 +269,10 @@ def convert_doc_to_docx(base_dir: Path) -> None:
             except Exception:
                 pass
 
+    LOGGER.info("Conversão de todos os arquivos .doc concluída com sucesso.\n")
+
 
 def discover_documents(base_dir: Path) -> list[Path]:
-    convert_doc_to_docx(base_dir)
     docs: list[Path] = []
     for path in base_dir.rglob("*"):
         if not path.is_file():
@@ -523,7 +563,8 @@ def process_documents(
             key=lambda p: relative_display_path(p, base_dir).casefold(),
         )
 
-        LOGGER.info("família: %s", family)
+        LOGGER.info("")
+        LOGGER.info("Família: %s", family)
         LOGGER.info("%s documento(s) encontrado(s)", len(family_docs))
 
         for doc_path in family_docs:
@@ -629,6 +670,10 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("Nenhum placeholder informado para o rodapé.")
 
     try:
+        # Fase 1: Converter todos os .doc para .docx pasta a pasta e liberar instâncias do Word
+        convert_doc_to_docx(base_dir)
+
+        # Fase 2: Carregar planilha e aplicar numeração nos .docx
         client = load_sheet_client(
             spreadsheet_id=str(args.sheet_id),
             worksheet_name=str(args.worksheet),

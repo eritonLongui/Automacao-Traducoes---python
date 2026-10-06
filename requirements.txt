@@ -4,6 +4,5 @@ python-dotenv
 pymupdf
 gspread
 opencv-python
-paddlepaddle
 paddleocr
 numpy
