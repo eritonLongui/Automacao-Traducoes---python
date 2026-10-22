@@ -265,6 +265,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "nulla più",
             "nulla di più",
             "nulla più da certificare",
+            "era da certificare",
             "certificato a trascrizione integrale",
             "comunione dei beni",
             "aerogramma",
