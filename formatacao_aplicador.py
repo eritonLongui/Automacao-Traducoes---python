@@ -282,6 +282,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "registro di ",
             "comunione parziale dei beni",
             "comunione universale dei beni",
+            "separazione totale dei beni",
             "data della registrazione",
             "lui",
             "lei",
@@ -296,6 +297,10 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "divorzio",
             "atti di",
             "suplente",
+            "descrizione integrale",
+            "stato di",
+            "trascrizione integrale",
+            "nulla consta",
         ):
             _formatar_ocorrencias(
                 doc,
@@ -313,6 +318,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "certifico",
             "ufficio",
             "nascita",
+            "nascite",
             "matrimonio",
             "osservazioni",
             "lo sposo",
@@ -333,6 +339,8 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "anotazioni",
             "brasiliano",
             "brasiliana",
+            "il contraente",
+            "la contraente",
         ):
             _formatar_ocorrencias(
                 doc,
