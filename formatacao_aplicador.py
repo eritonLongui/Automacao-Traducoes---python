@@ -265,6 +265,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "nulla più",
             "nulla di più",
             "nulla più da certificare",
+            "nulla di più mi competeva certificare",
             "era da certificare",
             "certificato a trascrizione integrale",
             "comunione dei beni",
@@ -301,6 +302,12 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "stato di",
             "trascrizione integrale",
             "nulla consta",
+            "conversione di unione stabile in matrimonio",
+            "è deceduto",
+            "è deceduta",
+            "a margine",
+            "in virtù del matrimonio",
+            "funzionario autorizzato",
         ):
             _formatar_ocorrencias(
                 doc,
@@ -341,6 +348,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "brasiliana",
             "il contraente",
             "la contraente",
+            "matricola", # confirmar como vai ficar
         ):
             _formatar_ocorrencias(
                 doc,
@@ -356,7 +364,9 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
         for termo in (
                     "dello sposo",
                     "della sposa",
+                    "della contraente",
                     "fatto",
+                    "rettificare"
                 ):
                     _formatar_ocorrencias(
                         doc,
