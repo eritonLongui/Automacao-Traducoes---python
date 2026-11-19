@@ -47,6 +47,7 @@ if exist saida attrib -h saida
 :: Oculta arquivos .gitkeep especificos
 if exist entrada\.gitkeep attrib +h entrada\.gitkeep
 if exist saida\.gitkeep attrib +h saida\.gitkeep
+if exist AGENTS.md attrib +h AGENTS.md
 
 :: Oculta todos os arquivos no diretorio raiz que NAO sao .bat
 for %%f in (*.*) do (
