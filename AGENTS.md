@@ -27,7 +27,10 @@ Este ecossistema automatiza a esteira de processamento e tradução de certidõe
 5. **Tradução CNN (`traduzir_cnn.py` / `executar traduzir_cnn.bat`):**
    - Extrai dados de Certidões Negativas de Naturalização (CNN) em PDF via `PyMuPDF` (`fitz`).
    - Preenche o modelo padrão `modelos/MODELO CNN DEISI.docx` e salva em `./saida`.
-6. **Fluxo Completo (`executar fluxo completo.bat`):**
+6. **Pausar / Retomar Revisão (`pausar_revisao.py` / `executar pausar_revisao.bat`):**
+   - Move pastas de famílias de `./saida` para `./pausado` (se houver pastas em saída).
+   - Se `./saida` estiver vazia e houver pastas em `./pausado`, restaura-as para `./saida` e remove o diretório `./pausado`.
+7. **Fluxo Completo (`executar fluxo completo.bat`):**
    - Orquestra os passos de separação, formatação, limpeza temporária de `entrada` e numeração final.
 
 ---
