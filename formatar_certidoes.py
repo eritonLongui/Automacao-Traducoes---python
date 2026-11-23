@@ -18,6 +18,7 @@ from formatacao_aplicador import (
     resetar_formatacao_range,
     aplicar_segmentos,
     aplicar_formatacoes_gerais,
+    replace_final_date,
 )
 
 
@@ -196,6 +197,8 @@ def processar_arquivo(
         )
 
         aplicar_segmentos(doc, analise["segments"]) 
+
+        replace_final_date(doc)
 
         doc.SaveAs2(str(out_path), FileFormat=16)
 

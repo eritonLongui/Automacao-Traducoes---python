@@ -1,4 +1,6 @@
 from typing import Dict, Any, List
+import re
+from datetime import datetime
 
 from formatacao_config import ROLE_STYLES
 from formatacao_leitor_word import sanitize_word_text
@@ -6,6 +8,35 @@ from formatacao_leitor_word import sanitize_word_text
 
 WD_FIND_STOP = 0
 WD_COLLAPSE_END = 0
+
+DATE_PATTERN = re.compile(
+    r"(Poich[eé] non risulta nient[’\x27]altro nel documento da me tradotto, ho redatto il presente Strumento Pubblico di Traduzione nella citt[aà] di Porto Alegre, il\s+)"
+    r"(\d{2}/\d{2}/\d{4})"
+    r"(\.)",
+    flags=re.IGNORECASE
+)
+
+
+def replace_final_date(doc, new_date: str = None) -> bool:
+    """
+    Procura a frase final de encerramento da tradução e atualiza apenas a data para a data informada (ou data atual).
+    Preserva a formatação do restante do documento.
+    """
+    if new_date is None:
+        new_date = datetime.now().strftime("%d/%m/%Y")
+
+    for p in doc.Paragraphs:
+        txt = p.Range.Text
+        m = DATE_PATTERN.search(txt)
+        if m:
+            para_start = p.Range.Start
+            date_start = para_start + m.start(2)
+            date_end = para_start + m.end(2)
+
+            date_range = doc.Range(date_start, date_end)
+            date_range.Text = new_date
+            return True
+    return False
 
 def capitalizar_primeira(texto: str) -> str:
     """Ex.: 'certifica' -> 'Certifica'"""
@@ -308,6 +339,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "a margine",
             "in virtù del matrimonio",
             "funzionario autorizzato",
+            "atto esente",
         ):
             _formatar_ocorrencias(
                 doc,

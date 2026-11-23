@@ -51,6 +51,19 @@ for %%f in ("entrada\*") do (
 )
 
 echo.
+echo =======================================================
+echo Atualizando data das certidoes para a data atual...
+echo =======================================================
+python atualizar_data_traducoes.py
+
+if errorlevel 1 (
+    echo.
+    echo Ocorreu um erro ao atualizar a data das certidoes.
+    pause
+    exit /b 1
+)
+
+echo.
 echo ======================================
 echo Executando numerar_traducoes.py...
 echo ======================================
