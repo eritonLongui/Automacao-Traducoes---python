@@ -1,13 +1,14 @@
 """
 Fluxo de solicitação de traduções para o Mauri.
-- Lê as pastas em ./entrada
-- Identifica subpastas '/mauri' (case-insensitive)
+- Lê as pastas de famílias em ./entrada
+- Identifica apenas arquivos PDF (.pdf) dentro da pasta da família
+  (arquivos .doc e .docx são ignorados e preservados)
 - Pergunta se o envio é urgente
-- Prepara o e-mail com os anexos encontrados em '/mauri'
+- Prepara o e-mail anexando apenas os PDFs encontrados
 - Envia via SMTP (com credenciais do .env)
 - Registra a solicitação na planilha do Google (aba MAURIZIO)
-- Se enviado e registrado com sucesso: exclui a pasta '/mauri'
-  (e a pasta da família caso não sobre nenhum outro arquivo/pasta nela).
+- Se enviado e registrado com sucesso: exclui apenas os PDFs enviados
+  (e a pasta da família caso não sobre nenhum outro arquivo ou subpasta nela).
 """
 
 from __future__ import annotations
@@ -102,11 +103,13 @@ LOGGER = logging.getLogger("solicitar_mauri")
 # FUNÇÕES DE APOIO
 # =========================
 
-def discover_mauri_tasks(base_dir: Path) -> list[tuple[Path, Path, str, list[Path]]]:
+def discover_mauri_tasks(base_dir: Path) -> list[tuple[Path, str, list[Path]]]:
     """
-    Varre ./entrada e localiza pastas de família que possuem subpasta 'mauri'.
+    Varre ./entrada e localiza pastas de família que possuem arquivos PDF (.pdf).
+    Arquivos .doc e .docx são ignorados por este fluxo e preservados.
+    Também suporta caso os PDFs estejam numa subpasta 'mauri' por compatibilidade.
     Retorna uma lista de tuplas:
-    (family_dir, mauri_dir, family_name, files_in_mauri)
+    (family_dir, family_name, pdf_files)
     """
     tasks = []
     if not base_dir.exists():
@@ -119,26 +122,14 @@ def discover_mauri_tasks(base_dir: Path) -> list[tuple[Path, Path, str, list[Pat
 
         family_name = _split_family_token(item.name)
 
-        # Procura subpasta chamada 'mauri' (case-insensitive)
-        mauri_subdirs = [
-            sub for sub in item.iterdir()
-            if sub.is_dir() and sub.name.strip().lower() == "mauri"
-        ]
+        # Procura PDFs diretamente na pasta da família ou em subpasta 'mauri'
+        pdf_files = []
+        for f in item.rglob("*.pdf"):
+            if f.is_file() and not f.name.startswith("~$") and not f.name.startswith("."):
+                pdf_files.append(f)
 
-        if not mauri_subdirs:
-            continue
-
-        for mauri_dir in mauri_subdirs:
-            # Lista arquivos válidos (ignora arquivos temporários do Word/Office ~$*)
-            files = [
-                f for f in mauri_dir.iterdir()
-                if f.is_file() and not f.name.startswith("~$") and not f.name.startswith(".")
-            ]
-
-            if files:
-                tasks.append((item, mauri_dir, family_name, sorted(files, key=lambda x: x.name.lower())))
-            else:
-                LOGGER.warning("Subpasta 'mauri' vazia em: %s", item.name)
+        if pdf_files:
+            tasks.append((item, family_name, sorted(pdf_files, key=lambda x: x.name.lower())))
 
     return tasks
 
@@ -350,15 +341,31 @@ def register_in_maurizio_sheet(
     return target_row
 
 
-def clean_processed_family_folder(family_dir: Path, mauri_dir: Path) -> None:
+def clean_processed_family_folder(family_dir: Path, sent_files: list[Path]) -> None:
     """
-    Exclui a pasta /mauri processada.
-    Se a pasta da família não contiver outros arquivos ou subpastas além dela,
-    exclui também a pasta da família.
+    Exclui apenas os arquivos PDF que foram enviados por e-mail.
+    Se a pasta da família não contiver outros arquivos ou subpastas além dos excluídos,
+    exclui também a pasta da família. Caso contenha outros documentos (.doc, .docx, etc.),
+    a pasta da família é preservada intacta.
     """
-    if mauri_dir.exists():
-        shutil.rmtree(mauri_dir)
-        LOGGER.info("Subpasta removida: %s", mauri_dir.name)
+    for file_path in sent_files:
+        try:
+            if file_path.exists():
+                file_path.unlink()
+                LOGGER.info("Arquivo PDF removido: %s", file_path.name)
+        except Exception as exc:
+            LOGGER.warning("Não foi possível excluir o arquivo '%s': %s", file_path.name, exc)
+
+    # Remove subpastas vazias (ex: se existia uma subpasta 'mauri' vazia)
+    for sub in list(family_dir.iterdir()):
+        if sub.is_dir():
+            sub_items = [i for i in sub.iterdir() if not i.name.startswith(".")]
+            if not sub_items:
+                try:
+                    shutil.rmtree(sub)
+                    LOGGER.info("Subpasta vazia removida: %s", sub.name)
+                except Exception:
+                    pass
 
     # Verifica se restou algum arquivo ou pasta na família
     remaining_items = [
@@ -367,11 +374,15 @@ def clean_processed_family_folder(family_dir: Path, mauri_dir: Path) -> None:
     ]
 
     if not remaining_items:
-        shutil.rmtree(family_dir)
-        LOGGER.info("Pasta da família vazia removida: %s", family_dir.name)
+        try:
+            shutil.rmtree(family_dir)
+            LOGGER.info("Pasta da família vazia removida: %s", family_dir.name)
+        except Exception as exc:
+            LOGGER.warning("Não foi possível remover a pasta da família '%s': %s", family_dir.name, exc)
     else:
         LOGGER.info(
-            "Pasta da família mantida pois contém outros documentos (%d restante(s)).",
+            "Pasta da família '%s' mantida pois contém outros documentos (%d restante(s), ex: .docx/.doc).",
+            family_dir.name,
             len(remaining_items),
         )
 
@@ -401,13 +412,13 @@ def main() -> None:
     tasks = discover_mauri_tasks(ENTRADA_DIR)
 
     if not tasks:
-        print("\nNenhuma subpasta '/mauri' com arquivos encontrada em ./entrada.")
-        print("Certifique-se de que a estrutura é ./entrada/<Nome da Familia>/mauri/<arquivos>")
+        print("\nNenhum arquivo PDF para envio ao Mauri encontrado em ./entrada.")
+        print("Os arquivos .doc e .docx são preservados e não ativam este fluxo.")
         return
 
-    print(f"\nDetectada(s) {len(tasks)} solicitação(ões) pendente(s):\n")
-    for idx, (_, mauri_dir, family_name, files) in enumerate(tasks, start=1):
-        print(f"  {idx}. Família: {family_name} ({len(files)} arquivo(s))")
+    print(f"\nDetectada(s) {len(tasks)} família(s) com PDF(s) para o Mauri:\n")
+    for idx, (_, family_name, files) in enumerate(tasks, start=1):
+        print(f"  {idx}. Família: {family_name} ({len(files)} PDF(s))")
         for f in files:
             print(f"     - {f.name}")
 
@@ -438,7 +449,7 @@ def main() -> None:
     sucessos = 0
     falhas = 0
 
-    for family_dir, mauri_dir, family_name, files in tasks:
+    for family_dir, family_name, files in tasks:
         print("\n" + "=" * 50)
         LOGGER.info("Processando: %s", family_name)
 
@@ -564,9 +575,9 @@ def main() -> None:
                 reg_date=hoje,
             )
 
-            # 3. Limpar pasta /mauri (e pasta da família se vazia)
-            LOGGER.info("Limpando arquivos processados...")
-            clean_processed_family_folder(family_dir, mauri_dir)
+            # 3. Limpar arquivos PDF processados (e pasta da família se vazia)
+            LOGGER.info("Limpando arquivos PDF processados...")
+            clean_processed_family_folder(family_dir, files)
 
             sucessos += 1
             LOGGER.info("Processamento da família '%s' concluído com sucesso!", family_name)
