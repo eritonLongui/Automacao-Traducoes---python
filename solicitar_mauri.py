@@ -112,28 +112,39 @@ def discover_mauri_tasks(base_dir: Path) -> list[tuple[Path, Path, str, list[Pat
     return tasks
 
 
+def get_effective_cc_list(user_email: str, cc_list: list[str]) -> list[str]:
+    """Remove o próprio remetente da lista de cópia (Cc) para evitar auto-cópia."""
+    user_norm = user_email.strip().lower()
+    return [email for email in cc_list if email.strip().lower() != user_norm]
+
+
 def send_email_smtp(
     subject: str,
-    body_text: str,
+    body_html: str,
     attachments: list[Path],
     to_list: list[str],
     cc_list: list[str],
 ) -> None:
-    """Envia o e-mail com múltiplos anexos utilizando SMTP."""
+    """Envia o e-mail (HTML + texto puro alternativo) com múltiplos anexos utilizando SMTP."""
     if not SMTP_USER or not SMTP_PASSWORD:
         raise ValueError(
             "Configurações SMTP_USER e SMTP_PASSWORD não foram preenchidas no arquivo .env."
         )
 
-    msg = MIMEMultipart()
+    # Filtra Cc caso o remetente esteja na lista
+    effective_cc = get_effective_cc_list(SMTP_USER, cc_list)
+
+    msg = MIMEMultipart("mixed")
     msg["From"] = SMTP_USER
     msg["To"] = ", ".join(to_list)
-    if cc_list:
-        msg["Cc"] = ", ".join(cc_list)
+    if effective_cc:
+        msg["Cc"] = ", ".join(effective_cc)
     msg["Subject"] = subject
 
-    # Corpo do e-mail
-    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+    # Container alternativo para texto puro e HTML
+    msg_alt = MIMEMultipart("alternative")
+    msg_alt.attach(MIMEText(body_html, "html", "utf-8"))
+    msg.attach(msg_alt)
 
     # Anexos
     for file_path in attachments:
@@ -147,7 +158,7 @@ def send_email_smtp(
         )
         msg.attach(part)
 
-    recipients = to_list + cc_list
+    recipients = to_list + effective_cc
 
     LOGGER.info("Conectando ao servidor SMTP %s:%s...", SMTP_HOST, SMTP_PORT)
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
@@ -155,7 +166,7 @@ def send_email_smtp(
         server.login(SMTP_USER, SMTP_PASSWORD)
         server.send_message(msg, from_addr=SMTP_USER, to_addrs=recipients)
 
-    LOGGER.info("E-mail enviado com sucesso para %s (Cc: %s)", to_list, cc_list)
+    LOGGER.info("E-mail enviado com sucesso para %s (Cc: %s)", to_list, effective_cc)
 
 
 def register_in_maurizio_sheet(
@@ -278,11 +289,6 @@ def main() -> None:
     else:
         print(">> Marcado como: [NORMAL]")
 
-    confirm = input("\nDeseja prosseguir com o envio e registro? [S/N]: ").strip().lower()
-    if confirm not in ["s", "sim"]:
-        print("Operação cancelada pelo usuário.")
-        return
-
     # Inicializa cliente da planilha
     print("\nConectando à planilha...")
     try:
@@ -312,30 +318,38 @@ def main() -> None:
         # Extrai nomes das certidões
         doc_names = [extract_document_name(f) for f in files]
         doc_sequence_str = ", ".join(doc_names)
-        files_bullet_list = "\n".join(f"- {name}" for name in doc_names)
 
-        # Corpo do e-mail
-        urgente_aviso = "ATENÇÃO: ESTE PEDIDO TEM CARÁTER DE URGÊNCIA.\n\n" if is_urgent else ""
-        body_text = (
-            f"Olá,\n\n"
-            f"{urgente_aviso}"
-            f"Seguem em anexo os documentos para tradução da família {family_name}.\n\n"
-            f"Documentos anexados ({len(files)}):\n"
-            f"{files_bullet_list}\n\n"
-            f"Atenciosamente,\n"
-            f"Equipe Nostrali"
+        # Monta itens para o corpo do e-mail:
+        # Padrão: <b>nome_da_familia</b> - tipos_de_documentos - nome_da_pessoa_do_documento
+        # (Por enquanto os nomes dos arquivos são usados como placeholder até definirmos a regra de extração)
+        body_lines_html = []
+        for name in doc_names:
+            body_lines_html.append(f"<li><b>{family_name}</b> - {name}</li>")
+
+        items_html = "\n".join(body_lines_html)
+
+        body_html = (
+            f"<p>Olá,</p>"
+            f"<p>Seguem traduções à serem feitas:</p>"
+            f"<ul>"
+            f"{items_html}"
+            f"</ul>"
         )
 
         try:
             if dry_run:
+                simulated_cc = get_effective_cc_list(SMTP_USER, EMAIL_CC)
                 print("\n[SIMULAÇÃO] --- PRÉVIA DO E-MAIL ---")
+                print(f"De:   {SMTP_USER or '(Definido no .env)'}")
                 print(f"Para: {', '.join(EMAIL_TO)}")
-                print(f"Cc:   {', '.join(EMAIL_CC)}")
+                print(f"Cc:   {', '.join(simulated_cc) if simulated_cc else '(Nenhum - remetente removido)'}")
                 print(f"Assunto: {subject}")
                 print(f"Anexos ({len(files)}): {[f.name for f in files]}")
-                print("\n--- CORPO DO E-MAIL ---")
+                print("\n--- CORPO DO E-MAIL (Texto Puro) ---")
                 print(body_text)
-                print("-----------------------\n")
+                print("--- CORPO DO E-MAIL (Visualização HTML) ---")
+                print(body_html)
+                print("-------------------------------------------\n")
 
                 # Simula a busca de linha na planilha
                 all_values = sheet_client._worksheet.get_all_values()
@@ -362,7 +376,7 @@ def main() -> None:
             LOGGER.info("Enviando e-mail...")
             send_email_smtp(
                 subject=subject,
-                body_text=body_text,
+                body_html=body_html,
                 attachments=files,
                 to_list=EMAIL_TO,
                 cc_list=EMAIL_CC,
