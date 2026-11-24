@@ -12,6 +12,7 @@ Fluxo de solicitação de traduções para o Mauri.
 
 from __future__ import annotations
 
+import argparse
 import logging
 import os
 import shutil
@@ -236,8 +237,21 @@ def clean_processed_family_folder(family_dir: Path, mauri_dir: Path) -> None:
 # =========================
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Solicitação de traduções - Mauri")
+    parser.add_argument(
+        "--dry-run", "-t",
+        action="store_true",
+        help="Modo simulação: valida pastas, monta e-mail e verifica planilha sem enviar e sem apagar nada.",
+    )
+    args = parser.parse_args()
+    dry_run = args.dry_run
+
     print("=" * 60)
-    print("      FLUXO DE SOLICITAÇÃO DE TRADUÇÕES - MAURI")
+    if dry_run:
+        print("   FLUXO DE SOLICITAÇÃO - MAURI [MODO SIMULAÇÃO / TESTE]")
+        print("   (Nenhum e-mail será enviado, nenhum arquivo será apagado)")
+    else:
+        print("      FLUXO DE SOLICITAÇÃO DE TRADUÇÕES - MAURI")
     print("=" * 60)
 
     tasks = discover_mauri_tasks(ENTRADA_DIR)
@@ -313,6 +327,37 @@ def main() -> None:
         )
 
         try:
+            if dry_run:
+                print("\n[SIMULAÇÃO] --- PRÉVIA DO E-MAIL ---")
+                print(f"Para: {', '.join(EMAIL_TO)}")
+                print(f"Cc:   {', '.join(EMAIL_CC)}")
+                print(f"Assunto: {subject}")
+                print(f"Anexos ({len(files)}): {[f.name for f in files]}")
+                print("\n--- CORPO DO E-MAIL ---")
+                print(body_text)
+                print("-----------------------\n")
+
+                # Simula a busca de linha na planilha
+                all_values = sheet_client._worksheet.get_all_values()
+                target_row = len(all_values) + 1
+                for idx, row in enumerate(all_values[2:], start=3):
+                    col_c = row[2].strip() if len(row) > 2 else ""
+                    col_d = row[3].strip() if len(row) > 3 else ""
+                    col_e = row[4].strip() if len(row) > 4 else ""
+                    col_f = row[5].strip() if len(row) > 5 else ""
+                    if not any([col_c, col_d, col_e, col_f]):
+                        target_row = idx
+                        break
+
+                print(f"[SIMULAÇÃO] Planilha: Seria gravado na linha {target_row} da aba MAURIZIO:")
+                print(f"            Coluna C (Cliente): {family_name}")
+                print(f"            Coluna D (Tipo):    {doc_sequence_str}")
+                print(f"            Coluna E (Data):    {hoje.strftime('%d/%m/%Y')}")
+                print(f"            Coluna F (Qtd):     {len(files)}")
+                print("[SIMULAÇÃO] Nenhuma exclusão de arquivo/pasta foi realizada.")
+                sucessos += 1
+                continue
+
             # 1. Enviar e-mail
             LOGGER.info("Enviando e-mail...")
             send_email_smtp(
