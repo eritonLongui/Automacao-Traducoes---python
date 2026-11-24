@@ -49,6 +49,7 @@ load_dotenv()
 
 PROJECT_DIR = Path(__file__).resolve().parent
 ENTRADA_DIR = PROJECT_DIR / "entrada"
+DIVIDIDOS_DIR = PROJECT_DIR / "divididos"
 
 WORKSHEET_NAME = "MAURIZIO"
 
@@ -387,6 +388,48 @@ def clean_processed_family_folder(family_dir: Path, sent_files: list[Path]) -> N
         )
 
 
+def mover_pastas_restantes_para_divididos(entrada_dir: Path, divididos_dir: Path) -> None:
+    """
+    Ao final do fluxo (após envio e remoção dos PDFs), move todas as pastas de famílias
+    remanescentes em ./entrada diretamente para ./divididos, sem alterar absolutamente nada
+    no conteúdo, similar à lógica de pausar_revisao.py.
+    """
+    if not entrada_dir.exists():
+        return
+
+    pastas_familias = [p for p in entrada_dir.iterdir() if p.is_dir() and not p.name.startswith(".")]
+    if not pastas_familias:
+        return
+
+    divididos_dir.mkdir(parents=True, exist_ok=True)
+    print("\n" + "=" * 50)
+    print("Movendo pastas remanescentes de 'entrada' para 'divididos'...")
+    print("=" * 50)
+
+    for pasta in pastas_familias:
+        destino = divididos_dir / pasta.name
+        if destino.exists():
+            LOGGER.warning("A pasta '%s' já existe em 'divididos'. Mesclando/atualizando arquivos...", pasta.name)
+            # Move arquivo por arquivo se a pasta já existir em divididos
+            for item in pasta.iterdir():
+                dest_item = destino / item.name
+                if dest_item.exists():
+                    if dest_item.is_dir():
+                        shutil.rmtree(dest_item)
+                    else:
+                        dest_item.unlink()
+                shutil.move(str(item), str(dest_item))
+            # Remove a pasta de origem se ficou vazia
+            try:
+                shutil.rmtree(pasta)
+            except Exception:
+                pass
+        else:
+            shutil.move(str(pasta), str(destino))
+
+        LOGGER.info("-> Movida para divididos: %s", pasta.name)
+
+
 # =========================
 # EXECUÇÃO PRINCIPAL
 # =========================
@@ -413,7 +456,10 @@ def main() -> None:
 
     if not tasks:
         print("\nNenhum arquivo PDF para envio ao Mauri encontrado em ./entrada.")
-        print("Os arquivos .doc e .docx são preservados e não ativam este fluxo.")
+        print("Os arquivos .doc e .docx são preservados e não ativam este envio.")
+        # Se não há PDFs para enviar mas há pastas em entrada, move para divididos
+        if not dry_run:
+            mover_pastas_restantes_para_divididos(ENTRADA_DIR, DIVIDIDOS_DIR)
         return
 
     print(f"\nDetectada(s) {len(tasks)} família(s) com PDF(s) para o Mauri:\n")
@@ -590,6 +636,12 @@ def main() -> None:
     print("\n" + "=" * 60)
     print(f"Resumo da Execução: {sucessos} com sucesso, {falhas} falha(s).")
     print("=" * 60)
+
+    # Move pastas remanescentes para divididos (apenas se não estiver em modo dry-run e não houver falhas críticas)
+    if not dry_run:
+        mover_pastas_restantes_para_divididos(ENTRADA_DIR, DIVIDIDOS_DIR)
+    else:
+        print("\n[SIMULAÇÃO] Se não estivesse em modo teste, as pastas remanescentes seriam movidas para 'divididos'.")
 
 
 if __name__ == "__main__":

@@ -1,31 +1,19 @@
 @echo off
-title Separador de Certidoes
+title Fluxo Completo de Traducoes
 
 cd /d "%~dp0"
 
-set "TEM_ARQUIVOS=0"
-if exist "entrada" (
-    for /r "entrada" %%f in (*) do (
-        if /i not "%%~nxf"==".gitkeep" set "TEM_ARQUIVOS=1"
-    )
-)
+echo ======================================
+echo Executando solicitar_mauri.py...
+echo ======================================
+python solicitar_mauri.py
 
-if "%TEM_ARQUIVOS%"=="1" (
-    echo =================================
-    echo Executando separar_arquivos.py...
-    echo =================================
-    python separar_arquivos.py
-
-    if errorlevel 1 (
-        echo.
-        echo Ocorreu um erro ao executar separar_arquivos.py.
-        pause
-        exit /b 1
-    )
-) else (
-    echo ========================================================
-    echo Nenhum documento na pasta entrada. Pulando separacao...
-    echo ========================================================
+if errorlevel 1 (
+    echo.
+    echo Ocorreu um erro ao executar solicitar_mauri.py.
+    echo O fluxo completo foi interrompido para correcao.
+    pause
+    exit /b 1
 )
 
 echo.
