@@ -15,8 +15,11 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import re
 import shutil
 import smtplib
+import unicodedata
+from collections import Counter
 from datetime import date
 from email import encoders
 from email.mime.base import MIMEBase
@@ -47,6 +50,34 @@ PROJECT_DIR = Path(__file__).resolve().parent
 ENTRADA_DIR = PROJECT_DIR / "entrada"
 
 WORKSHEET_NAME = "MAURIZIO"
+
+# Mapeamento de prefixos para tipo no singular e plural
+DOC_TYPE_MAP = {
+    "CNN": ("CNN", "CNNs"),
+    "CN": ("Nascimento", "Nascimentos"),
+    "CC": ("Casamento", "Casamentos"),
+    "CO": ("Óbito", "Óbitos"),
+    "DIV": ("Divórcio", "Divórcios"),
+    "ESC": ("Escritura", "Escrituras"),
+    "PR": ("Procuração", "Procurações"),
+}
+
+# Prefixo por extenso (caso venha escrito por extenso no nome do arquivo)
+DOC_FULLNAME_MAP = {
+    "NASCIMENTO": ("Nascimento", "Nascimentos"),
+    "CASAMENTO": ("Casamento", "Casamentos"),
+    "OBITO": ("Óbito", "Óbitos"),
+    "DIVORCIO": ("Divórcio", "Divórcios"),
+    "ESCRITURA": ("Escritura", "Escrituras"),
+    "PROCURACAO": ("Procuração", "Procurações"),
+}
+
+# Sufixos de idioma
+SUFFIX_MAP = {
+    "ITALIANO": "ITALIANO",
+    "INGLES": "INGLÊS",
+    "ESPANHOL": "ESPANHOL",
+}
 
 # Destinatários e Cópia
 EMAIL_TO = ["traduzione@nostrali.com.br"]
@@ -110,6 +141,105 @@ def discover_mauri_tasks(base_dir: Path) -> list[tuple[Path, Path, str, list[Pat
                 LOGGER.warning("Subpasta 'mauri' vazia em: %s", item.name)
 
     return tasks
+
+
+def _strip_accents(text: str) -> str:
+    """Remove acentos e caracteres especiais para facilitar comparações seguras."""
+    normalized = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in normalized if not unicodedata.combining(c))
+
+
+def parse_mauri_document_name(doc_path: Path) -> tuple[str, str, str | None]:
+    """
+    Analisa a nomenclatura do arquivo na pasta /mauri.
+    Retorna uma tupla:
+      (tipo_singular, nome_pessoa, idioma_sufixo)
+
+    Regras:
+    1. Sufixos aceitos no final (com ou sem hífen/espaço): ITALIANO, INGLÊS, ESPANHOL.
+    2. Prefixos aceitos no início: CNN, CN, CC, CO, DIV, ESC, PR (ou palavras inteiras: DIVORCIO, etc.).
+    3. Se for inglês ou espanhol, o tipo exibido é "Certidão estrangeira (inglês ou espanhol)".
+    4. Se não corresponder a nenhuma regra, mantém o nome completo do arquivo.
+    """
+    stem = doc_path.stem.strip()
+    raw_clean = _strip_accents(stem).upper()
+
+    # Detecta sufixo de idioma no final
+    detected_suffix = None
+    for suf_key, suf_label in SUFFIX_MAP.items():
+        # Ex: "DIVORCIO ADRIANE - ITALIANO" ou "DIVORCIO ADRIANE ITALIANO"
+        pattern = rf"(?:^|[\s\-_]+){suf_key}$"
+        match = re.search(pattern, raw_clean)
+        if match:
+            detected_suffix = suf_label
+            # Remove o sufixo do final da string original
+            cut_idx = match.start()
+            stem = stem[:cut_idx].rstrip(" -_")
+            raw_clean = raw_clean[:cut_idx].rstrip(" -_")
+            break
+
+    # Se tiver sufixo INGLÊS ou ESPANHOL, a regra define o tipo como estrangeiro
+    if detected_suffix in ("INGLÊS", "ESPANHOL"):
+        lang_name = detected_suffix.lower()
+        foreign_type = f"Certidão estrangeira ({lang_name})"
+        # Tenta extrair a pessoa removendo o prefixo se existir
+        matched_prefix = False
+        # Ordena prefixos por tamanho desc (CNN antes de CN)
+        for pref in sorted(list(DOC_TYPE_MAP.keys()) + list(DOC_FULLNAME_MAP.keys()), key=len, reverse=True):
+            if raw_clean.startswith(pref) and (len(raw_clean) == len(pref) or raw_clean[len(pref)] in " -_"):
+                person = stem[len(pref):].strip(" -_")
+                return foreign_type, person, detected_suffix
+
+        return foreign_type, stem, detected_suffix
+
+    # Detecta prefixos conhecidos (CNN, CN, CC, CO, DIV, ESC, PR)
+    for pref, (sing, _) in sorted(DOC_TYPE_MAP.items(), key=lambda x: len(x[0]), reverse=True):
+        if raw_clean.startswith(pref) and (len(raw_clean) == len(pref) or raw_clean[len(pref)] in " -_"):
+            person = stem[len(pref):].strip(" -_")
+            return sing, person, detected_suffix
+
+    # Detecta por extenso (DIVORCIO, ESCRITURA, etc.)
+    for full_pref, (sing, _) in sorted(DOC_FULLNAME_MAP.items(), key=lambda x: len(x[0]), reverse=True):
+        if raw_clean.startswith(full_pref) and (len(raw_clean) == len(full_pref) or raw_clean[len(full_pref)] in " -_"):
+            person = stem[len(full_pref):].strip(" -_")
+            return sing, person, detected_suffix
+
+    # Regra de fallback: mantém o nome do arquivo
+    return stem, "", detected_suffix
+
+
+def format_grouped_types(type_counts: Counter[str]) -> str:
+    """
+    Formata as contagens de tipos para resumo e planilha.
+    Exemplos:
+      - Divórcio (1) -> "Divórcio"
+      - Divórcio (2) -> "2 Divórcios"
+      - Divórcio (1) e Escritura (1) -> "Divórcio e Escritura"
+      - Divórcio (2) e Escritura (1) -> "2 Divórcios e Escritura"
+      - 3 ou mais: "2 Divórcios, Casamento e Escritura"
+    """
+    # Mapeia plural se conhecido
+    plural_map = {}
+    for sing, plur in DOC_TYPE_MAP.values():
+        plural_map[sing] = plur
+    for sing, plur in DOC_FULLNAME_MAP.values():
+        plural_map[sing] = plur
+
+    parts = []
+    for t_name, count in type_counts.items():
+        if count == 1:
+            parts.append(t_name)
+        else:
+            plural_name = plural_map.get(t_name, f"{t_name}s")
+            parts.append(f"{count} {plural_name}")
+
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0]
+    if len(parts) == 2:
+        return f"{parts[0]} e {parts[1]}"
+    return f"{', '.join(parts[:-1])} e {parts[-1]}"
 
 
 def get_effective_cc_list(user_email: str, cc_list: list[str]) -> list[str]:
@@ -318,34 +448,58 @@ def main() -> None:
         else:
             subject = f"Traduções Nostrali - {family_name}"
 
-        # Extrai nomes das certidões
-        doc_names = [extract_document_name(f) for f in files]
-        doc_sequence_str = ", ".join(doc_names)
+        # Analisa cada arquivo da pasta /mauri
+        parsed_docs = []
+        type_counter: Counter[str] = Counter()
+        has_italian = False
+
+        for f in files:
+            doc_type, person, suffix = parse_mauri_document_name(f)
+            parsed_docs.append((f, doc_type, person, suffix))
+            type_counter[doc_type] += 1
+            if suffix == "ITALIANO":
+                has_italian = True
+
+        # String formatada dos tipos para a Planilha (Coluna D)
+        tipo_resumo_planilha = format_grouped_types(type_counter)
 
         # Monta itens para o corpo do e-mail:
         # Padrão: <b>nome_da_familia</b> - tipos_de_documentos - nome_da_pessoa_do_documento
-        # (Por enquanto os nomes dos arquivos são usados como placeholder até definirmos a regra de extração)
+        # Se for fallback sem pessoa: <b>nome_da_familia</b> - nome_do_documento
         body_lines_text = []
         body_lines_html = []
-        for name in doc_names:
-            body_lines_text.append(f"- {family_name} - {name}")
-            body_lines_html.append(f"<li><b>{family_name}</b> - {name}</li>")
+        for f, doc_type, person, suffix in parsed_docs:
+            if person:
+                line_plain = f"- {family_name} - {doc_type} - {person}"
+                line_html = f"<li><b>{family_name}</b> - {doc_type} - {person}</li>"
+            else:
+                line_plain = f"- {family_name} - {doc_type}"
+                line_html = f"<li><b>{family_name}</b> - {doc_type}</li>"
+
+            body_lines_text.append(line_plain)
+            body_lines_html.append(line_html)
 
         items_text = "\n".join(body_lines_text)
         items_html = "\n".join(body_lines_html)
 
+        # Introdução do e-mail com regra de sufixo Italiano
+        if has_italian:
+            intro_text = "Olá,\nSeguem traduções à serem feitas para o Português:\n"
+            intro_html = "<p>Olá,</p><p>Seguem traduções à serem feitas <b>para o Português</b>:</p>"
+        else:
+            intro_text = "Olá,\nSeguem traduções à serem feitas:\n"
+            intro_html = "<p>Olá,</p><p>Seguem traduções à serem feitas:</p>"
+
         # Versão texto puro (com quebras de linha e assinatura em texto)
         body_text = (
-            f"Olá,\n"
-            f"Seguem traduções à serem feitas:\n"
+            f"{intro_text}"
             f"{items_text}\n\n\n"
             f"Atenciosamente,"
         )
 
         # Versão HTML (com quebras de linha e 'Atenciosamente,' em itálico)
         body_html = (
-            f"<p>Olá,</p>"
-            f"<p>Seguem traduções à serem feitas:</p>"
+            f"{intro_html}"
             f"<ul>"
             f"{items_html}"
             f"</ul>"
@@ -382,7 +536,7 @@ def main() -> None:
 
                 print(f"[SIMULAÇÃO] Planilha: Seria gravado na linha {target_row} da aba MAURIZIO:")
                 print(f"            Coluna C (Cliente): {family_name}")
-                print(f"            Coluna D (Tipo):    {doc_sequence_str}")
+                print(f"            Coluna D (Tipo):    {tipo_resumo_planilha}")
                 print(f"            Coluna E (Data):    {hoje.strftime('%d/%m/%Y')}")
                 print(f"            Coluna F (Qtd):     {len(files)}")
                 print("[SIMULAÇÃO] Nenhuma exclusão de arquivo/pasta foi realizada.")
@@ -405,7 +559,7 @@ def main() -> None:
             register_in_maurizio_sheet(
                 client=sheet_client,
                 family_name=family_name,
-                document_sequence_str=doc_sequence_str,
+                document_sequence_str=tipo_resumo_planilha,
                 quantity=len(files),
                 reg_date=hoje,
             )
