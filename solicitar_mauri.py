@@ -120,6 +120,7 @@ def get_effective_cc_list(user_email: str, cc_list: list[str]) -> list[str]:
 
 def send_email_smtp(
     subject: str,
+    body_text: str,
     body_html: str,
     attachments: list[Path],
     to_list: list[str],
@@ -141,8 +142,10 @@ def send_email_smtp(
         msg["Cc"] = ", ".join(effective_cc)
     msg["Subject"] = subject
 
-    # Container alternativo para texto puro e HTML
+    # Container alternativo: clientes que suportam HTML veem a versão estilizada;
+    # clientes de texto puro recebem a versão alternativa limpa.
     msg_alt = MIMEMultipart("alternative")
+    msg_alt.attach(MIMEText(body_text, "plain", "utf-8"))
     msg_alt.attach(MIMEText(body_html, "html", "utf-8"))
     msg.attach(msg_alt)
 
@@ -322,18 +325,32 @@ def main() -> None:
         # Monta itens para o corpo do e-mail:
         # Padrão: <b>nome_da_familia</b> - tipos_de_documentos - nome_da_pessoa_do_documento
         # (Por enquanto os nomes dos arquivos são usados como placeholder até definirmos a regra de extração)
+        body_lines_text = []
         body_lines_html = []
         for name in doc_names:
+            body_lines_text.append(f"- {family_name} - {name}")
             body_lines_html.append(f"<li><b>{family_name}</b> - {name}</li>")
 
+        items_text = "\n".join(body_lines_text)
         items_html = "\n".join(body_lines_html)
 
+        # Versão texto puro (com quebras de linha e assinatura em texto)
+        body_text = (
+            f"Olá,\n"
+            f"Seguem traduções à serem feitas:\n"
+            f"{items_text}\n\n\n"
+            f"Atenciosamente,"
+        )
+
+        # Versão HTML (com quebras de linha e 'Atenciosamente,' em itálico)
         body_html = (
             f"<p>Olá,</p>"
             f"<p>Seguem traduções à serem feitas:</p>"
             f"<ul>"
             f"{items_html}"
             f"</ul>"
+            f"<br><br>"
+            f"<p><i>Atenciosamente,</i></p>"
         )
 
         try:
@@ -376,6 +393,7 @@ def main() -> None:
             LOGGER.info("Enviando e-mail...")
             send_email_smtp(
                 subject=subject,
+                body_text=body_text,
                 body_html=body_html,
                 attachments=files,
                 to_list=EMAIL_TO,
