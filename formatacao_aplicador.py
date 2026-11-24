@@ -340,6 +340,8 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "in virtù del matrimonio",
             "funzionario autorizzato",
             "atto esente",
+            "dell'atto consta quanto segue",
+            "annotazione di",
         ):
             _formatar_ocorrencias(
                 doc,

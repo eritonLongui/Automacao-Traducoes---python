@@ -1,0 +1,354 @@
+"""
+Fluxo de solicitação de traduções para o Mauri.
+- Lê as pastas em ./entrada
+- Identifica subpastas '/mauri' (case-insensitive)
+- Pergunta se o envio é urgente
+- Prepara o e-mail com os anexos encontrados em '/mauri'
+- Envia via SMTP (com credenciais do .env)
+- Registra a solicitação na planilha do Google (aba MAURIZIO)
+- Se enviado e registrado com sucesso: exclui a pasta '/mauri'
+  (e a pasta da família caso não sobre nenhum outro arquivo/pasta nela).
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import shutil
+import smtplib
+from datetime import date
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from pathlib import Path
+from typing import List
+
+from dotenv import load_dotenv
+
+# Reaproveitamento das funções do projeto
+from numerar_traducoes import (
+    GOOGLE_SHEETS_CREDENTIALS_JSON,
+    GOOGLE_SHEETS_ID,
+    GSpreadSheetClient,
+    _split_family_token,
+    extract_document_name,
+)
+
+# Carrega variáveis de ambiente
+load_dotenv()
+
+# =========================
+# CONFIGURAÇÕES EDITÁVEIS
+# =========================
+
+PROJECT_DIR = Path(__file__).resolve().parent
+ENTRADA_DIR = PROJECT_DIR / "entrada"
+
+WORKSHEET_NAME = "MAURIZIO"
+
+# Destinatários e Cópia
+EMAIL_TO = ["traduzione@nostrali.com.br"]
+EMAIL_CC = ["daniel.pozzer@nostrali.com.br", "eriton.santos@nostrali.com.br"]
+
+# Configurações SMTP (.env ou fallback)
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+
+# Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+LOGGER = logging.getLogger("solicitar_mauri")
+
+
+# =========================
+# FUNÇÕES DE APOIO
+# =========================
+
+def discover_mauri_tasks(base_dir: Path) -> list[tuple[Path, Path, str, list[Path]]]:
+    """
+    Varre ./entrada e localiza pastas de família que possuem subpasta 'mauri'.
+    Retorna uma lista de tuplas:
+    (family_dir, mauri_dir, family_name, files_in_mauri)
+    """
+    tasks = []
+    if not base_dir.exists():
+        LOGGER.warning("Diretório de entrada não encontrado: %s", base_dir)
+        return tasks
+
+    for item in sorted(base_dir.iterdir()):
+        if not item.is_dir() or item.name.startswith("."):
+            continue
+
+        family_name = _split_family_token(item.name)
+
+        # Procura subpasta chamada 'mauri' (case-insensitive)
+        mauri_subdirs = [
+            sub for sub in item.iterdir()
+            if sub.is_dir() and sub.name.strip().lower() == "mauri"
+        ]
+
+        if not mauri_subdirs:
+            continue
+
+        for mauri_dir in mauri_subdirs:
+            # Lista arquivos válidos (ignora arquivos temporários do Word/Office ~$*)
+            files = [
+                f for f in mauri_dir.iterdir()
+                if f.is_file() and not f.name.startswith("~$") and not f.name.startswith(".")
+            ]
+
+            if files:
+                tasks.append((item, mauri_dir, family_name, sorted(files, key=lambda x: x.name.lower())))
+            else:
+                LOGGER.warning("Subpasta 'mauri' vazia em: %s", item.name)
+
+    return tasks
+
+
+def send_email_smtp(
+    subject: str,
+    body_text: str,
+    attachments: list[Path],
+    to_list: list[str],
+    cc_list: list[str],
+) -> None:
+    """Envia o e-mail com múltiplos anexos utilizando SMTP."""
+    if not SMTP_USER or not SMTP_PASSWORD:
+        raise ValueError(
+            "Configurações SMTP_USER e SMTP_PASSWORD não foram preenchidas no arquivo .env."
+        )
+
+    msg = MIMEMultipart()
+    msg["From"] = SMTP_USER
+    msg["To"] = ", ".join(to_list)
+    if cc_list:
+        msg["Cc"] = ", ".join(cc_list)
+    msg["Subject"] = subject
+
+    # Corpo do e-mail
+    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+
+    # Anexos
+    for file_path in attachments:
+        with open(file_path, "rb") as f:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(f.read())
+        encoders.encode_base64(part)
+        part.add_header(
+            "Content-Disposition",
+            f'attachment; filename="{file_path.name}"',
+        )
+        msg.attach(part)
+
+    recipients = to_list + cc_list
+
+    LOGGER.info("Conectando ao servidor SMTP %s:%s...", SMTP_HOST, SMTP_PORT)
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg, from_addr=SMTP_USER, to_addrs=recipients)
+
+    LOGGER.info("E-mail enviado com sucesso para %s (Cc: %s)", to_list, cc_list)
+
+
+def register_in_maurizio_sheet(
+    client: GSpreadSheetClient,
+    family_name: str,
+    document_sequence_str: str,
+    quantity: int,
+    reg_date: date,
+) -> int:
+    """
+    Grava os dados na aba MAURIZIO:
+    Coluna C: CLIENTE (família)
+    Coluna D: TIPO DE DOCUMENTO (nomes das certidões em sequência)
+    Coluna E: DATA (dd/mm/aaaa)
+    Coluna F: QUANTIDADE
+    """
+    worksheet = client._worksheet
+    all_values = worksheet.get_all_values()
+
+    # Encontra a primeira linha livre onde as colunas C até F estejam vazias
+    target_row = len(all_values) + 1
+    for idx, row in enumerate(all_values[2:], start=3):  # Cabeçalho está na linha 2
+        col_c = row[2].strip() if len(row) > 2 else ""
+        col_d = row[3].strip() if len(row) > 3 else ""
+        col_e = row[4].strip() if len(row) > 4 else ""
+        col_f = row[5].strip() if len(row) > 5 else ""
+
+        if not any([col_c, col_d, col_e, col_f]):
+            target_row = idx
+            break
+
+    client.ensure_row_exists(target_row)
+
+    row_data = [
+        family_name,
+        document_sequence_str,
+        reg_date.strftime("%d/%m/%Y"),
+        str(quantity),
+    ]
+
+    # Atualiza C{target_row}:F{target_row}
+    worksheet.update(
+        range_name=f"C{target_row}:F{target_row}",
+        values=[row_data],
+        value_input_option="RAW",
+    )
+    LOGGER.info("Registrado na aba MAURIZIO (Linha %d): %s", target_row, row_data)
+    return target_row
+
+
+def clean_processed_family_folder(family_dir: Path, mauri_dir: Path) -> None:
+    """
+    Exclui a pasta /mauri processada.
+    Se a pasta da família não contiver outros arquivos ou subpastas além dela,
+    exclui também a pasta da família.
+    """
+    if mauri_dir.exists():
+        shutil.rmtree(mauri_dir)
+        LOGGER.info("Subpasta removida: %s", mauri_dir.name)
+
+    # Verifica se restou algum arquivo ou pasta na família
+    remaining_items = [
+        item for item in family_dir.iterdir()
+        if not item.name.startswith(".") and not item.name.startswith("~$")
+    ]
+
+    if not remaining_items:
+        shutil.rmtree(family_dir)
+        LOGGER.info("Pasta da família vazia removida: %s", family_dir.name)
+    else:
+        LOGGER.info(
+            "Pasta da família mantida pois contém outros documentos (%d restante(s)).",
+            len(remaining_items),
+        )
+
+
+# =========================
+# EXECUÇÃO PRINCIPAL
+# =========================
+
+def main() -> None:
+    print("=" * 60)
+    print("      FLUXO DE SOLICITAÇÃO DE TRADUÇÕES - MAURI")
+    print("=" * 60)
+
+    tasks = discover_mauri_tasks(ENTRADA_DIR)
+
+    if not tasks:
+        print("\nNenhuma subpasta '/mauri' com arquivos encontrada em ./entrada.")
+        print("Certifique-se de que a estrutura é ./entrada/<Nome da Familia>/mauri/<arquivos>")
+        return
+
+    print(f"\nDetectada(s) {len(tasks)} solicitação(ões) pendente(s):\n")
+    for idx, (_, mauri_dir, family_name, files) in enumerate(tasks, start=1):
+        print(f"  {idx}. Família: {family_name} ({len(files)} arquivo(s))")
+        for f in files:
+            print(f"     - {f.name}")
+
+    print("\n" + "-" * 60)
+
+    # Pergunta sobre urgência
+    resposta_urgente = input("O envio é URGENTE? Digite 's' ou 'sim' (ou apenas Enter para Não): ").strip().lower()
+    is_urgent = resposta_urgente in ["s", "sim"]
+
+    if is_urgent:
+        print(">> Marcado como: [URGENTE]")
+    else:
+        print(">> Marcado como: [NORMAL]")
+
+    confirm = input("\nDeseja prosseguir com o envio e registro? [S/N]: ").strip().lower()
+    if confirm not in ["s", "sim"]:
+        print("Operação cancelada pelo usuário.")
+        return
+
+    # Inicializa cliente da planilha
+    print("\nConectando à planilha...")
+    try:
+        sheet_client = GSpreadSheetClient(
+            spreadsheet_id=GOOGLE_SHEETS_ID,
+            worksheet_name=WORKSHEET_NAME,
+            credentials_json=str(GOOGLE_SHEETS_CREDENTIALS_JSON),
+        )
+    except Exception as exc:
+        LOGGER.error("Erro ao conectar à planilha Google: %s", exc)
+        return
+
+    hoje = date.today()
+    sucessos = 0
+    falhas = 0
+
+    for family_dir, mauri_dir, family_name, files in tasks:
+        print("\n" + "=" * 50)
+        LOGGER.info("Processando: %s", family_name)
+
+        # Monta assunto
+        if is_urgent:
+            subject = f"URGENTE - Traduções Nostrali - {family_name}"
+        else:
+            subject = f"Traduções Nostrali - {family_name}"
+
+        # Extrai nomes das certidões
+        doc_names = [extract_document_name(f) for f in files]
+        doc_sequence_str = ", ".join(doc_names)
+        files_bullet_list = "\n".join(f"- {name}" for name in doc_names)
+
+        # Corpo do e-mail
+        urgente_aviso = "ATENÇÃO: ESTE PEDIDO TEM CARÁTER DE URGÊNCIA.\n\n" if is_urgent else ""
+        body_text = (
+            f"Olá,\n\n"
+            f"{urgente_aviso}"
+            f"Seguem em anexo os documentos para tradução da família {family_name}.\n\n"
+            f"Documentos anexados ({len(files)}):\n"
+            f"{files_bullet_list}\n\n"
+            f"Atenciosamente,\n"
+            f"Equipe Nostrali"
+        )
+
+        try:
+            # 1. Enviar e-mail
+            LOGGER.info("Enviando e-mail...")
+            send_email_smtp(
+                subject=subject,
+                body_text=body_text,
+                attachments=files,
+                to_list=EMAIL_TO,
+                cc_list=EMAIL_CC,
+            )
+
+            # 2. Registrar na planilha
+            LOGGER.info("Registrando na planilha...")
+            register_in_maurizio_sheet(
+                client=sheet_client,
+                family_name=family_name,
+                document_sequence_str=doc_sequence_str,
+                quantity=len(files),
+                reg_date=hoje,
+            )
+
+            # 3. Limpar pasta /mauri (e pasta da família se vazia)
+            LOGGER.info("Limpando arquivos processados...")
+            clean_processed_family_folder(family_dir, mauri_dir)
+
+            sucessos += 1
+            LOGGER.info("Processamento da família '%s' concluído com sucesso!", family_name)
+
+        except Exception as exc:
+            falhas += 1
+            LOGGER.error("Falha ao processar família '%s': %s", family_name, exc)
+            LOGGER.warning("Os arquivos de '%s' NÃO foram apagados para garantir a segurança.", family_name)
+
+    print("\n" + "=" * 60)
+    print(f"Resumo da Execução: {sucessos} com sucesso, {falhas} falha(s).")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()
