@@ -388,7 +388,7 @@ def clean_processed_family_folder(family_dir: Path, sent_files: list[Path]) -> N
         )
 
 
-def mover_pastas_restantes_para_divididos(entrada_dir: Path, divididos_dir: Path) -> None:
+def mover_pastas_restantes_para_divididos(entrada_dir: Path, divididos_dir: Path, silencioso: bool = False) -> None:
     """
     Ao final do fluxo (após envio e remoção dos PDFs), move todas as pastas de famílias
     remanescentes em ./entrada diretamente para ./divididos, sem alterar absolutamente nada
@@ -402,14 +402,16 @@ def mover_pastas_restantes_para_divididos(entrada_dir: Path, divididos_dir: Path
         return
 
     divididos_dir.mkdir(parents=True, exist_ok=True)
-    print("\n" + "=" * 50)
-    print("Movendo pastas remanescentes de 'entrada' para 'divididos'...")
-    print("=" * 50)
+    if not silencioso:
+        print("\n" + "=" * 50)
+        print("Movendo pastas remanescentes de 'entrada' para 'divididos'...")
+        print("=" * 50)
 
     for pasta in pastas_familias:
         destino = divididos_dir / pasta.name
         if destino.exists():
-            LOGGER.warning("A pasta '%s' já existe em 'divididos'. Mesclando/atualizando arquivos...", pasta.name)
+            if not silencioso:
+                LOGGER.warning("A pasta '%s' já existe em 'divididos'. Mesclando/atualizando arquivos...", pasta.name)
             # Move arquivo por arquivo se a pasta já existir em divididos
             for item in pasta.iterdir():
                 dest_item = destino / item.name
@@ -427,7 +429,8 @@ def mover_pastas_restantes_para_divididos(entrada_dir: Path, divididos_dir: Path
         else:
             shutil.move(str(pasta), str(destino))
 
-        LOGGER.info("-> Movida para divididos: %s", pasta.name)
+        if not silencioso:
+            LOGGER.info("-> Movida para divididos: %s", pasta.name)
 
 
 # =========================
@@ -444,6 +447,15 @@ def main() -> None:
     args = parser.parse_args()
     dry_run = args.dry_run
 
+    tasks = discover_mauri_tasks(ENTRADA_DIR)
+
+    if not tasks:
+        print("\nNenhuma solicitação para o Mauri encontrada, seguindo com os próximos fluxos...\n")
+        # Se não há PDFs para enviar mas há pastas em entrada, move silenciosamente para divididos
+        if not dry_run:
+            mover_pastas_restantes_para_divididos(ENTRADA_DIR, DIVIDIDOS_DIR, silencioso=True)
+        return
+
     print("=" * 60)
     if dry_run:
         print("   FLUXO DE SOLICITAÇÃO - MAURI [MODO SIMULAÇÃO / TESTE]")
@@ -451,16 +463,6 @@ def main() -> None:
     else:
         print("      FLUXO DE SOLICITAÇÃO DE TRADUÇÕES - MAURI")
     print("=" * 60)
-
-    tasks = discover_mauri_tasks(ENTRADA_DIR)
-
-    if not tasks:
-        print("\nNenhum arquivo PDF para envio ao Mauri encontrado em ./entrada.")
-        print("Os arquivos .doc e .docx são preservados e não ativam este envio.")
-        # Se não há PDFs para enviar mas há pastas em entrada, move para divididos
-        if not dry_run:
-            mover_pastas_restantes_para_divididos(ENTRADA_DIR, DIVIDIDOS_DIR)
-        return
 
     print(f"\nDetectada(s) {len(tasks)} família(s) com PDF(s) para o Mauri:\n")
     for idx, (_, family_name, files) in enumerate(tasks, start=1):
