@@ -42,7 +42,7 @@ O projeto utiliza um padrão onde scripts utilitários executáveis para o usuá
 ```text
 .
 ├── entrada/                     # Arquivos brutos recebidos (.doc consolidados, .pdf)
-├── divididos/                   # Certidões separadas (.docx) em subpastas por Família
+├── divididos/ [oculto]          # Certidões separadas (.docx) em subpastas por Família (etapa intermediária)
 ├── saida/                       # Documentos finais formatados e numerados (.docx)
 ├── modelos/ [oculto]            # Modelos Word base (ex: MODELO CNN DEISI.docx)
 ├── executar fluxo completo.bat  # Runner principal para o usuário final

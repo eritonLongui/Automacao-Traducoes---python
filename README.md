@@ -15,7 +15,7 @@ Scripts em Python para facilitar e automatizar fluxos de trabalho com certidões
 ```text
 .
 ├── entrada/                         # Entrada inicial de pastas e arquivos recebidos
-├── divididos/                       # Certidões individuais (.docx) divididas por Família
+├── divididos/ [oculto]              # Certidões individuais (.docx) divididas por Família (etapa intermediária)
 ├── saida/                           # Documentos finais formatados e numerados (.docx)
 ├── modelos/ [oculto]                # Modelos Word base
 ├── executar fluxo completo.bat      # Orquestrador de todo o pipeline

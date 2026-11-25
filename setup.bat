@@ -34,14 +34,14 @@ if not exist __pycache__ mkdir __pycache__
 if not exist entrada\.gitkeep type nul > entrada\.gitkeep
 if not exist saida\.gitkeep type nul > saida\.gitkeep
 
-:: Oculta pastas internas/de desenvolvimento
+:: Oculta pastas internas/de processamento intermediario
 if exist __pycache__ attrib +h __pycache__
 if exist modelos attrib +h modelos
 if exist .git attrib +h .git
+if exist divididos attrib +h divididos
 
-:: Garante visibilidade das pastas de uso principal
+:: Garante visibilidade das pastas de uso principal (entrada e saida)
 if exist entrada attrib -h entrada
-if exist divididos attrib -h divididos
 if exist saida attrib -h saida
 
 :: Oculta arquivos .gitkeep especificos
