@@ -39,7 +39,7 @@ Scripts em Python para facilitar e automatizar fluxos de trabalho com certidões
 
 ## Configuração Inicial
 
-1. Após baixar ou clonar o projeto, execute o script de setup:
+1. Após baixar ou clonar o projeto, dê dois cliques no arquivo:
    ```cmd
    setup.bat
    ```
@@ -47,7 +47,6 @@ Scripts em Python para facilitar e automatizar fluxos de trabalho com certidões
 2. Crie ou configure o arquivo `.env` na raiz do projeto com as chaves e credenciais:
    ```env
    GEMINI_API_KEY=sua_chave_gemini_aqui
-   GROQ_API_KEY=sua_chave_groq_aqui
 
    # Configurações de Envio de E-mail (solicitar_mauri.py)
    SMTP_HOST=smtp.gmail.com
