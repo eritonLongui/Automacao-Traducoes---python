@@ -3,10 +3,10 @@ Numera traduções em ./saida, grava na planilha e atualiza apenas o rodapé dos
 Fluxo:
 - varre a pasta base e subpastas em busca de .docx;
 - identifica a família pelo nome da subpasta (ou pelo nome do arquivo, se estiver direto na pasta base);
-- evita duplicidade somente quando FAMÍLIAS + DOCUMENTO + DATA forem iguais;
-- encontra a primeira linha com B:E vazias;
-- grava a linha na planilha;
-- atualiza o rodapé do Word;
+- verifica se já existe registro prévio do documento e família nos últimos 12 dias:
+  - se existir, não inclui novo registro na planilha, avisa no log a data do registro anterior
+    e atualiza o rodapé normalmente com o número e ano baseados na data do registro prévio;
+  - se não existir, grava nova linha na planilha e atualiza o rodapé com a data atual;
 - se o Word falhar depois da planilha gravada, o erro é registrado no log.
 """
 
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import datetime
 import logging
 import os
 import re
@@ -21,7 +22,7 @@ import sys
 import unicodedata
 import time
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -150,6 +151,19 @@ def _normalize(value: str) -> str:
     text = unicodedata.normalize("NFKD", str(value))
     text = text.encode("ascii", "ignore").decode("ascii")
     return re.sub(r"\s+", " ", text).strip().casefold()
+
+
+def _parse_date(value: str) -> Optional[date]:
+    """Tenta converter datas em formatos comuns da planilha para objeto date."""
+    raw = str(value).strip()
+    if not raw:
+        return None
+    for fmt in ("%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d"):
+        try:
+            return datetime.datetime.strptime(raw, fmt).date()
+        except ValueError:
+            pass
+    return None
 
 
 def _is_blank(value: object) -> bool:
@@ -376,6 +390,56 @@ class SheetIndex:
                 return row
         return None
 
+    def find_recent_document(
+        self, family: str, document: str, reference_date: date, max_days: int = 12
+    ) -> Optional[tuple[SheetRow, date, str]]:
+        """
+        Verifica se há um registro do documento e família em questão nos últimos `max_days` dias
+        (em relação a reference_date, i.e., 0 <= (reference_date - reg_date).days <= max_days).
+        Retorna (row, reg_date, translation_number) ou None se não encontrar.
+        Caso haja múltiplos, retorna o mais recente.
+        """
+        normalized_family = _normalize(family)
+        normalized_document = _normalize(document)
+
+        best_match: Optional[tuple[SheetRow, date, str]] = None
+
+        for row in self.rows:
+            if (
+                self.family_idx >= len(row.values)
+                or self.document_idx >= len(row.values)
+                or self.date_idx >= len(row.values)
+            ):
+                continue
+
+            if (
+                _normalize(row.values[self.family_idx]) == normalized_family
+                and _normalize(row.values[self.document_idx]) == normalized_document
+            ):
+                raw_date = row.values[self.date_idx]
+                parsed_date = _parse_date(raw_date)
+                if parsed_date is None:
+                    continue
+
+                diff_days = (reference_date - parsed_date).days
+                if 0 <= diff_days <= max_days:
+                    # Obter translation_number existente ou derivá-lo da folha e parsed_date
+                    trans_num = ""
+                    if self.translation_idx < len(row.values):
+                        trans_num = str(row.values[self.translation_idx]).strip()
+                    if not trans_num or trans_num.startswith("/"):
+                        folha_str = str(row.values[self.folha_idx]).strip() if self.folha_idx < len(row.values) else ""
+                        try:
+                            folha_int = int(float(folha_str))
+                            trans_num = build_translation_number(folha_int, parsed_date)
+                        except (ValueError, TypeError):
+                            trans_num = ""
+
+                    if best_match is None or parsed_date > best_match[1]:
+                        best_match = (row, parsed_date, trans_num)
+
+        return best_match
+
     def next_folha_number(self) -> int:
         numbers: list[int] = []
         for row in self.rows:
@@ -572,12 +636,39 @@ def process_documents(
             document_name = extract_document_name(doc_path)
             registration_date = resolve_registration_date(doc_path)
 
-            if index.document_exists(family, document_name, registration_date) is not None:
+            recent_match = index.find_recent_document(family, document_name, registration_date, max_days=12)
+
+            if recent_match is not None:
+                _, prev_date, prev_translation_number = recent_match
+                prev_date_str = prev_date.strftime("%d/%m/%Y")
+                LOGGER.info("")
+                LOGGER.info("==== %s ====", document_name)
                 LOGGER.info(
-                    "Pulando já registrado: %s | data = %s",
-                    document_name,
-                    registration_date.strftime("%d/%m/%Y"),
+                    "Registro prévio encontrado na data %s (dentro dos últimos 12 dias). "
+                    "Nenhum registro incluído na planilha.",
+                    prev_date_str,
                 )
+                LOGGER.info("Atualizando rodapé com data anterior: tradução nº = %s", prev_translation_number)
+
+                if dry_run:
+                    LOGGER.info("[dry-run] Não alterei o documento: %s", rel_path)
+                    continue
+
+                try:
+                    changed = update_document(doc_path, prev_translation_number, placeholders)
+                    if changed == 0:
+                        raise DocumentError(
+                            "Nenhum padrão de tradução foi encontrado no rodapé. Verifique o texto do modelo."
+                        )
+                except Exception as exc:
+                    LOGGER.error(
+                        "Falha ao editar o rodapé do documento %s com registro anterior. Motivo: %s",
+                        rel_path,
+                        exc,
+                    )
+                    raise
+
+                processed += 1
                 continue
 
             folha_number = index.next_folha_number()

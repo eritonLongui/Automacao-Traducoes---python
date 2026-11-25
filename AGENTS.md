@@ -23,7 +23,7 @@ Este ecossistema automatiza a esteira de processamento e tradução de certidõe
    - Varre `./saida/<Nome Da Familia>/*.docx`.
    - Consulta e registra as traduções no Google Sheets (planilha `DEISI` da Nostrali).
    - Injeta o número sequencial oficial da tradução no rodapé do documento Word.
-   - Detecta duplicidades (mesma Família + Arquivo + Data da execução).
+   - Detecta duplicidades/revisões recentes: se já houver registro do documento e família nos últimos 12 dias, não cria nova linha na planilha, indica a data do registro anterior e atualiza o rodapé do documento com a numeração/ano daquele registro anterior.
 5. **Tradução CNN (`traduzir_cnn.py` / `executar traduzir_cnn.bat`):**
    - Extrai dados de Certidões Negativas de Naturalização (CNN) em PDF via `PyMuPDF` (`fitz`).
    - Preenche o modelo padrão `modelos/MODELO CNN DEISI.docx` e salva em `./saida`.
