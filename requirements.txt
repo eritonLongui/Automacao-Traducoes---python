@@ -3,6 +3,3 @@ pywin32
 python-dotenv
 pymupdf
 gspread
-opencv-python
-paddleocr
-numpy
