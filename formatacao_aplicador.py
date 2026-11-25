@@ -431,6 +431,7 @@ def aplicar_formatacoes_gerais(doc, nomes_registrado=None, corpo_range=None) -> 
             "osservazioni",
             "si è sposata",
             "si è sposato",
+            "atti di retifica",
         ):
             _formatar_ocorrencias(
                 doc,

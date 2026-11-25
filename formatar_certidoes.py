@@ -105,7 +105,7 @@ def caminho_saida_sem_formatacao(
     rel = arquivo_entrada.relative_to(entrada_base)
     destino_dir = saida_base / rel.parent
     destino_dir.mkdir(parents=True, exist_ok=True)
-    return destino_dir / f"{arquivo_entrada.stem}_sem_formatacao.docx"
+    return destino_dir / f"{arquivo_entrada.stem} _sem_formatacao.docx"
 
 
 def caminho_debug(
