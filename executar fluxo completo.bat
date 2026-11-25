@@ -16,6 +16,24 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: Verifica se ha pastas de familias em divididos para prosseguir
+set "TEM_FAMILIA=0"
+for /d %%p in ("divididos\*") do (
+    set "TEM_FAMILIA=1"
+    goto :verificacao_pastas
+)
+
+:verificacao_pastas
+if "%TEM_FAMILIA%"=="0" (
+    echo.
+    echo ========================================================
+    echo Nenhuma pasta de familia encontrada para processamento.
+    echo O fluxo completo foi finalizado.
+    echo ========================================================
+    pause
+    exit /b 0
+)
+
 echo.
 echo ===================================
 echo Executando formatar_certidoes.py...
