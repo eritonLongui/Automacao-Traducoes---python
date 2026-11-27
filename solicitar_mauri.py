@@ -274,13 +274,13 @@ def send_email_smtp(
     # Anexos
     for file_path in attachments:
         with open(file_path, "rb") as f:
-            part = MIMEBase("application", "octet-stream")
-            part.set_payload(f.read())
+            data = f.read()
+        maintype, subtype = ("application", "pdf") if file_path.suffix.lower() == ".pdf" else ("application", "octet-stream")
+        part = MIMEBase(maintype, subtype)
+        part.set_payload(data)
         encoders.encode_base64(part)
-        part.add_header(
-            "Content-Disposition",
-            f'attachment; filename="{file_path.name}"',
-        )
+        # Usa parâmetro filename= para que caracteres acentuados sejam codificados corretamente (RFC 2231)
+        part.add_header("Content-Disposition", "attachment", filename=file_path.name)
         msg.attach(part)
 
     recipients = to_list + effective_cc
