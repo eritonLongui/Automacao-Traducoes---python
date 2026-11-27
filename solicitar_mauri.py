@@ -472,14 +472,23 @@ def main() -> None:
 
     print("\n" + "-" * 60)
 
-    # Pergunta sobre urgência
-    resposta_urgente = input("O envio é URGENTE? Digite 's' ou 'sim' (ou apenas Enter para Não): ").strip().lower()
-    is_urgent = resposta_urgente in ["s", "sim"]
-
-    if is_urgent:
-        print(">> Marcado como: [URGENTE]")
+    # Pergunta sobre urgência (única se houver 1 família, ou por família se houver várias)
+    urgency_by_family: dict[str, bool] = {}
+    if len(tasks) == 1:
+        _, family_name, _ = tasks[0]
+        resposta_urgente = input("O envio é URGENTE? Digite 's' ou 'sim' (ou apenas Enter para Não): ").strip().lower()
+        is_urgent = resposta_urgente in ["s", "sim"]
+        urgency_by_family[family_name] = is_urgent
+        print(f">> Marcado como: [{'URGENTE' if is_urgent else 'NORMAL'}]")
     else:
-        print(">> Marcado como: [NORMAL]")
+        print("Informe a urgência para cada família:\n")
+        for idx, (_, family_name, _) in enumerate(tasks, start=1):
+            resposta_urgente = input(
+                f"  {idx}. O envio de '{family_name}' é URGENTE? Digite 's' ou 'sim' (ou Enter para Não): "
+            ).strip().lower()
+            is_urgent = resposta_urgente in ["s", "sim"]
+            urgency_by_family[family_name] = is_urgent
+            print(f"     >> '{family_name}': [{'URGENTE' if is_urgent else 'NORMAL'}]")
 
     # Inicializa cliente da planilha
     print("\nConectando à planilha...")
@@ -500,6 +509,8 @@ def main() -> None:
     for family_dir, family_name, files in tasks:
         print("\n" + "=" * 50)
         LOGGER.info("Processando: %s", family_name)
+
+        is_urgent = urgency_by_family.get(family_name, False)
 
         # Monta assunto
         if is_urgent:
